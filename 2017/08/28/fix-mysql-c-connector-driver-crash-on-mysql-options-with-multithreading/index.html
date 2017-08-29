@@ -6,14 +6,14 @@
   <meta name="renderer" content="webkit">
   <meta http-equiv="X-UA-Compatible" content="IE=edge" >
   <link rel="dns-prefetch" href="http://lida.site">
-  <title>解决libmysqlclient 在多线程下调用mysql_options 函数出现Segmentation fault的问题 | Dream Creator</title>
+  <title>解决libmysqlclient 在多线程下调用mysql_options 函数出现Segmentation fault的问题 | Dream Creator\&#39;s blog</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <meta name="description" content="一个服务,临近发布时突然发现在启动时会core dump, 通过调低线程数可以解决, 仔细调试后发现程序在调用mysql_options时触发了Segmentation fault.服务有多个线程,每个线程一个mysql 连接, 在每个线程调用所有mysql_* 函数之前先调用了mysql_init. 查阅了官方文档: https://dev.mysql.com/doc/refman/5.7/en">
 <meta name="keywords" content="mysql,crash,libmysqlclient,ubuntu,随笔">
 <meta property="og:type" content="article">
 <meta property="og:title" content="解决libmysqlclient 在多线程下调用mysql_options 函数出现Segmentation fault的问题">
 <meta property="og:url" content="http://lida.site/2017/08/28/fix-mysql-c-connector-driver-crash-on-mysql-options-with-multithreading/index.html">
-<meta property="og:site_name" content="Dream Creator">
+<meta property="og:site_name" content="Dream Creator\&#39;s blog">
 <meta property="og:description" content="一个服务,临近发布时突然发现在启动时会core dump, 通过调低线程数可以解决, 仔细调试后发现程序在调用mysql_options时触发了Segmentation fault.服务有多个线程,每个线程一个mysql 连接, 在每个线程调用所有mysql_* 函数之前先调用了mysql_init. 查阅了官方文档: https://dev.mysql.com/doc/refman/5.7/en">
 <meta property="og:locale" content="zh-CN">
 <meta property="og:updated_time" content="2017-08-28T07:30:57.476Z">
@@ -21,7 +21,7 @@
 <meta name="twitter:title" content="解决libmysqlclient 在多线程下调用mysql_options 函数出现Segmentation fault的问题">
 <meta name="twitter:description" content="一个服务,临近发布时突然发现在启动时会core dump, 通过调低线程数可以解决, 仔细调试后发现程序在调用mysql_options时触发了Segmentation fault.服务有多个线程,每个线程一个mysql 连接, 在每个线程调用所有mysql_* 函数之前先调用了mysql_init. 查阅了官方文档: https://dev.mysql.com/doc/refman/5.7/en">
   
-    <link rel="alternative" href="/atom.xml" title="Dream Creator" type="application/atom+xml">
+    <link rel="alternative" href="/atom.xml" title="Dream Creator\&#39;s blog" type="application/atom+xml">
   
   
     <link rel="icon" href="/favicon.png">
@@ -54,7 +54,7 @@
 		  <h1 class="header-author"><a href="/">David Lee</a></h1>
 		</hgroup>
 		
-		<p class="header-subtitle">爱做梦的技术宅的自言自语</p>
+		<p class="header-subtitle">一个爱做梦的人在这里自说自话</p>
 		
 
 		<nav class="header-menu">
@@ -114,7 +114,7 @@
 			  <h1 class="header-author js-header-author">David Lee</h1>
 			</hgroup>
 			
-			<p class="header-subtitle"><i class="icon icon-quo-left"></i>爱做梦的技术宅的自言自语<i class="icon icon-quo-right"></i></p>
+			<p class="header-subtitle"><i class="icon icon-quo-left"></i>一个爱做梦的人在这里自说自话<i class="icon icon-quo-right"></i></p>
 			
 			
 			
@@ -507,15 +507,15 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color4">vim</a>
+              </li>
+             
+              <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color4">编辑器</a>
               </li>
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color4">ide</a>
-              </li>
-             
-              <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color4">vim</a>
               </li>
             
             <div class="clearfix"></div>
