@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Dream Creator&#39;s blog</title>
+  <subtitle>一个爱做梦的人在这里自说自话</subtitle>
+  <link href="/atom.xml" rel="self"/>
+  
+  <link href="http://lida.site/"/>
+  <updated>2017-08-31T08:03:03.473Z</updated>
+  <id>http://lida.site/</id>
+  
+  <author>
+    <name>David Lee</name>
+    
+  </author>
+  
+  <generator uri="http://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>解决libmysqlclient在多线程环境下初始化会有几率crash的问题</title>
+    <link href="http://lida.site/2017/08/31/how-to-fix-libmysqlclient-init-crash-in-multithreading-environment/"/>
+    <id>http://lida.site/2017/08/31/how-to-fix-libmysqlclient-init-crash-in-multithreading-environment/</id>
+    <published>2017-08-31T07:38:41.000Z</published>
+    <updated>2017-08-31T08:03:03.473Z</updated>
+    
+    <content type="html"><![CDATA[<p>这个问题在<a href="/2017/08/28/fix-mysql-c-connector-driver-crash-on-mysql-options-with-multithreading/" title="之前的一篇文章">之前的一篇文章</a>中提到过,通过更换libmysqlclient的版本暂时规避了这个问题,但是后面使用过程中发现,其实还是不对的,启动时mysql_init有几率会返回一个空指针,后面的逻辑就走不下去了.所以怀疑这个问题其实和库的版本无关, 换了个库版本只是让问题的表现形式不同了而已.</p>
+<p>上mysql官网继续查阅文档,发现一篇文档如下:</p>
+<blockquote>
+<p><a href="https://dev.mysql.com/doc/refman/5.7/en/mysql-init.html" target="_blank" rel="external">https://dev.mysql.com/doc/refman/5.7/en/mysql-init.html</a><br>In a nonmulti-threaded environment, mysql_init() invokes mysql_library_init() automatically as necessary. However, mysql_library_init() is not thread-safe in a multi-threaded environment, and thus neither is mysql_init(). Before calling mysql_init(), either call mysql_library_init() prior to spawning any threads, or use a mutex to protect the mysql_library_init() call. This should be done prior to any other client library call.</p>
+</blockquote>
+<p>大概意思是 mysql_init 会检查 mysql_library_init这个函数是否有调用过,如果没调用过就会去调用一次, 而mysql_library_init这个函数不是线程安全的,所以导致mysql_init 也不是线程安全的, 所以需要在调用libmysqlclient 库里面的任何一个函数之前调用mysql_library_init, 用面向对象的思想来理解,就类似于单例模式的主动初始化.</p>
+<p>为了验证问题是否被解决,我写了如下测试代码:<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div></pre></td><td class="code"><pre><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> dbname = <span class="string">"testdb"</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> ip = <span class="string">"192.168.0.1"</span>;</div><div class="line"><span class="keyword">int</span> port = <span class="number">3306</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> username = <span class="string">"testuser1"</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> password = <span class="string">"asdfgh"</span>;</div><div class="line"></div><div class="line"><span class="built_in">std</span>::<span class="built_in">vector</span>&lt;<span class="built_in">std</span>::<span class="built_in">shared_ptr</span>&lt;<span class="built_in">std</span>::thread&gt;&gt; threads;</div><div class="line"><span class="keyword">for</span>(<span class="keyword">auto</span> i = <span class="number">0</span>; i != <span class="number">100</span>; ++i) &#123;</div><div class="line">  <span class="keyword">auto</span> pThread = <span class="built_in">std</span>::make_shared&lt;<span class="built_in">std</span>::thread&gt;([&amp;]()&#123;</div><div class="line">      <span class="built_in">std</span>::<span class="built_in">shared_ptr</span>&lt;TC_Mysql&gt; pMysqlConn(<span class="keyword">new</span> TC_Mysql(ip, username, password, dbname, <span class="string">"utf8"</span>, port));</div><div class="line">      pMysqlConn-&gt;connect();</div><div class="line">      DEBUGLOG &lt;&lt; <span class="string">"mysql connected"</span> &lt;&lt; <span class="built_in">std</span>::<span class="built_in">endl</span>;</div><div class="line">    &#125;);</div><div class="line">  threads.emplace_back(pThread);</div><div class="line">&#125;</div><div class="line"><span class="keyword">for</span>(<span class="keyword">auto</span> pT : threads) &#123;</div><div class="line">  pT-&gt;join();</div><div class="line">&#125;</div></pre></td></tr></table></figure></p>
+<p>上面的代码开启了100个线程,每个线程内只做一件事,就是创建一个mysql连接并连接到mysql服务器.</p>
+<p>毫无悬念的,直接执行会导致crash.</p>
+<p>现在,把他修改一下:</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div></pre></td><td class="code"><pre><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> dbname = <span class="string">"testdb"</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> ip = <span class="string">"192.168.0.1"</span>;</div><div class="line"><span class="keyword">int</span> port = <span class="number">3306</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> username = <span class="string">"testuser1"</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> password = <span class="string">"asdfgh"</span>;</div><div class="line">mysql_library_init(<span class="number">0</span>, <span class="literal">NULL</span>, <span class="literal">NULL</span>);  <span class="comment">//这里增加了一行libmysqlclient库初始化代码</span></div><div class="line"><span class="built_in">std</span>::<span class="built_in">vector</span>&lt;<span class="built_in">std</span>::<span class="built_in">shared_ptr</span>&lt;<span class="built_in">std</span>::thread&gt;&gt; threads;</div><div class="line"><span class="keyword">for</span>(<span class="keyword">auto</span> i = <span class="number">0</span>; i != <span class="number">100</span>; ++i) &#123;</div><div class="line">  <span class="keyword">auto</span> pThread = <span class="built_in">std</span>::make_shared&lt;<span class="built_in">std</span>::thread&gt;([&amp;]()&#123;</div><div class="line">      <span class="built_in">std</span>::<span class="built_in">shared_ptr</span>&lt;TC_Mysql&gt; pMysqlConn(<span class="keyword">new</span> TC_Mysql(ip, username, password, dbname, <span class="string">"utf8"</span>, port));</div><div class="line">      pMysqlConn-&gt;connect();</div><div class="line">      DEBUGLOG &lt;&lt; <span class="string">"mysql connected"</span> &lt;&lt; <span class="built_in">std</span>::<span class="built_in">endl</span>;</div><div class="line">    &#125;);</div><div class="line">  threads.emplace_back(pThread);</div><div class="line">&#125;</div><div class="line"><span class="keyword">for</span>(<span class="keyword">auto</span> pT : threads) &#123;</div><div class="line">  pT-&gt;join();</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>在创建连接之前调用  mysql_library_init 函数,编译运行后发现可以成功创建连接,程序不会crash.</p>
+<p>至此这个问题算是最终解决了.</p>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;这个问题在&lt;a href=&quot;/2017/08/28/fix-mysql-c-connector-driver-crash-on-mysql-options-with-multithreading/&quot; title=&quot;之前的一篇文章&quot;&gt;之前的一篇文章&lt;/a&gt;中提到过,通过更换l
+    
+    </summary>
+    
+    
+      <category term="mysql" scheme="http://lida.site/tags/mysql/"/>
+    
+      <category term="crash" scheme="http://lida.site/tags/crash/"/>
+    
+      <category term="libmysqlclient" scheme="http://lida.site/tags/libmysqlclient/"/>
+    
+      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
+    
+      <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>找到某个命令依赖的软件包名称</title>
+    <link href="http://lida.site/2017/08/28/how-to-find-a-command-depends-of/"/>
+    <id>http://lida.site/2017/08/28/how-to-find-a-command-depends-of/</id>
+    <published>2017-08-28T09:39:20.000Z</published>
+    <updated>2017-08-28T09:41:33.541Z</updated>
+    
+    <content type="html"><![CDATA[<p>前两天需要使用mkpasswd这个命令用来加密密码,发现ubuntu16.04似乎没有自带这个命令, 直接apt-get install mkpasswd显示找不到任何软件包.就在想如果有个命令可以反向查找软件包名称就好了,google了一下果然有, 在这里记录一下,以免遗忘.</p>
+<p>Ubuntu:</p>
+<blockquote>
+<p>$apt-get install apt-file<br>$apt-file update<br>$apt-file search<br>$apt-file search mkpasswd</p>
+</blockquote>
+<p>CentOS:</p>
+<blockquote>
+<p>yum whatprovides commandName</p>
+</blockquote>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;前两天需要使用mkpasswd这个命令用来加密密码,发现ubuntu16.04似乎没有自带这个命令, 直接apt-get install mkpasswd显示找不到任何软件包.就在想如果有个命令可以反向查找软件包名称就好了,google了一下果然有, 在这里记录一下,以免遗
+    
+    </summary>
+    
+    
+      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
+    
+      <category term="linux" scheme="http://lida.site/tags/linux/"/>
+    
+      <category term="apt-get" scheme="http://lida.site/tags/apt-get/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>解决libmysqlclient 在多线程下调用mysql_options 函数出现Segmentation fault的问题</title>
+    <link href="http://lida.site/2017/08/28/fix-mysql-c-connector-driver-crash-on-mysql-options-with-multithreading/"/>
+    <id>http://lida.site/2017/08/28/fix-mysql-c-connector-driver-crash-on-mysql-options-with-multithreading/</id>
+    <published>2017-08-28T07:15:53.000Z</published>
+    <updated>2017-08-31T08:04:35.703Z</updated>
+    
+    <content type="html"><![CDATA[<p>一个服务,临近发布时突然发现在启动时会core dump, 通过调低线程数可以解决, 仔细调试后发现程序在调用mysql_options时触发了Segmentation fault.<br>服务有多个线程,每个线程一个mysql 连接, 在每个线程调用所有mysql_* 函数之前先调用了mysql_init.</p>
+<p>查阅了官方文档: <a href="https://dev.mysql.com/doc/refman/5.7/en/c-api-threaded-clients.html" target="_blank" rel="external">https://dev.mysql.com/doc/refman/5.7/en/c-api-threaded-clients.html</a> 按照这个多线程编程指引,我的程序并没有问题.</p>
+<p>查询自己的mysql库 的版本号,是 ubuntu16.04 软件库默认的版本:</p>
+<blockquote>
+<p>$ dpkg -l | grep mysqlclient<br>ii  libmysqlclient-dev                        5.7.19-0ubuntu0.16.04.1   amd64                     MySQL database development files<br>ii  libmysqlclient20:amd64                    5.7.19-0ubuntu0.16.04.1   amd64                     MySQL database client library</p>
+</blockquote>
+<p>怀疑是不是这个版本的库有bug, 上google查了一下没找到什么资料.于是自己动手,丰衣足食,上mysql官网下载了一个最新的c_connector 替换掉之前的库,开200个线程测试,一切ok.</p>
+<p>下载连接:</p>
+<blockquote>
+<p><a href="https://cdn.mysql.com//Downloads/Connector-C/mysql-connector-c-6.1.11-linux-glibc2.12-x86_64.tar.gz" target="_blank" rel="external">https://cdn.mysql.com//Downloads/Connector-C/mysql-connector-c-6.1.11-linux-glibc2.12-x86_64.tar.gz</a></p>
+</blockquote>
+<p>没想到作为LTS版本的ubuntu官方软件库提供的库会有这么严重的bug, 看样子以后所有的库要尽量用官方发布的版本.</p>
+<p>2017-08-31 增加:<br>后面发现通过更换libmysqlclient版本并不能解决问题,只是让问题的表现形式变得不同了, 彻底解决这个问题请看<a href="/2017/08/31/how-to-fix-libmysqlclient-init-crash-in-multithreading-environment/" title="这里">这里</a>.</p>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;一个服务,临近发布时突然发现在启动时会core dump, 通过调低线程数可以解决, 仔细调试后发现程序在调用mysql_options时触发了Segmentation fault.&lt;br&gt;服务有多个线程,每个线程一个mysql 连接, 在每个线程调用所有mysql_* 函
+    
+    </summary>
+    
+    
+      <category term="mysql" scheme="http://lida.site/tags/mysql/"/>
+    
+      <category term="crash" scheme="http://lida.site/tags/crash/"/>
+    
+      <category term="libmysqlclient" scheme="http://lida.site/tags/libmysqlclient/"/>
+    
+      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
+    
+      <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>在ubuntu上安装source-code-pro字体</title>
+    <link href="http://lida.site/2017/08/25/how-to-install-adobe-source-code-pro-in-ubuntu/"/>
+    <id>http://lida.site/2017/08/25/how-to-install-adobe-source-code-pro-in-ubuntu/</id>
+    <published>2017-08-25T01:36:40.000Z</published>
+    <updated>2017-08-28T07:27:43.478Z</updated>
+    
+    <content type="html"><![CDATA[<p>只需要两行命令,记录一下</p>
+<blockquote>
+<p>sudo git clone <a href="https://github.com/adobe-fonts/source-code-pro.git" target="_blank" rel="external">https://github.com/adobe-fonts/source-code-pro.git</a> /usr/share/fonts/opentype/scp<br>cd /usr/share/fonts/opentype/scp<br>sudo git checkout release   //很重要,直接使用master编译字体后可能会导致乱码<br>sudo fc-cache -f -v</p>
+</blockquote>
+<p>如果 /usr/share/fonts/opentype/ 文件夹不存在,可以 sudo mkdir -p /usr/share/fonts/opentype/ 创建</p>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;只需要两行命令,记录一下&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;sudo git clone &lt;a href=&quot;https://github.com/adobe-fonts/source-code-pro.git&quot; target=&quot;_blank&quot; rel=&quot;externa
+    
+    </summary>
+    
+    
+      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
+    
+      <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
+    
+      <category term="字体" scheme="http://lida.site/tags/%E5%AD%97%E4%BD%93/"/>
+    
+      <category term="linux" scheme="http://lida.site/tags/linux/"/>
+    
+      <category term="fc-cache" scheme="http://lida.site/tags/fc-cache/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>在emacs中跳转光标到之前所在位置的几个方法</title>
+    <link href="http://lida.site/2017/08/22/how-to-jump-to-previous-position-in-emacs/"/>
+    <id>http://lida.site/2017/08/22/how-to-jump-to-previous-position-in-emacs/</id>
+    <published>2017-08-22T09:18:11.000Z</published>
+    <updated>2017-08-25T03:30:48.874Z</updated>
+    
+    <content type="html"><![CDATA[<p>仔细找了一下,有几个命令可以提供类似的功能:</p>
+<blockquote>
+<p>pop-global-mark C-x C-SPC</p>
+</blockquote>
+<p>这个命令提供了全局跳转到光标之前所在位置的功能,实际上这里也会有一个光标位置的list, 我安装了helm插件,所以有命令helm-global-mark-ring可以查看当前保存了哪些位置,这些位置信息就是一个环形队列, 使用pop-global-mark 来pop这个队列的最后一个元素,然后跳转过去.<br>试用后发现这个命令只有在显式使用C+SPC 进行 mark 操作并且马上切换到其他buffer时才会记录之前的位置, 而且同一个buffer记录的位置如果不pop掉,那么下次在同一个buffer内mark 其他位置也不会被放到global-mark-ring里面<br>用法比较奇怪.因为buffer之间的切换本来就很简单,C-x C-b 可以很方便的浏览所有的buffer并切换，切换buffer之前mark一下有点累赘了,所以个人感觉还是下一个命令适用范围比较广.</p>
+<blockquote>
+<p>C-u C-SPC</p>
+</blockquote>
+<p>这个命令会记录你的每次移动之前的位置,随便翻页,或者慢速上下移动光标,都会被记录,但是仅限当前buffer. 很多场景下也够用了, 如果安装了helm插件，可以通过helm-all-mark-rings来观察记录的位置</p>
+<blockquote>
+<p>helm-all-mark-rings</p>
+</blockquote>
+<p>这个命令可以很方便的查看当前所有的mark,当按快捷键得到的结果不符合预期时,可以再通过这个命令找到正确的跳转地址.</p>
+<p>通过这三个命令应该可以更方便的在各种文件中jump了。</p>
+<p>ps: 如果helm出现了两个结果列表(例如helm-all-mark-rings),可以使用C-o和M-o来切换列表, 前者表示next, 后者表示previous.</p>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;仔细找了一下,有几个命令可以提供类似的功能:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;pop-global-mark C-x C-SPC&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;这个命令提供了全局跳转到光标之前所在位置的功能,实际上这里也会有一个光标位置的list, 我安
+    
+    </summary>
+    
+    
+      <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
+    
+      <category term="emacs" scheme="http://lida.site/tags/emacs/"/>
+    
+      <category term="编辑器" scheme="http://lida.site/tags/%E7%BC%96%E8%BE%91%E5%99%A8/"/>
+    
+      <category term="ide" scheme="http://lida.site/tags/ide/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>开了一个新的博客，在这里记录一些想法</title>
+    <link href="http://lida.site/2017/08/22/new_blog_new_thought/"/>
+    <id>http://lida.site/2017/08/22/new_blog_new_thought/</id>
+    <published>2017-08-21T16:26:59.000Z</published>
+    <updated>2017-08-22T06:37:07.998Z</updated>
+    
+    <content type="html"><![CDATA[<p>最近发现vim的键位其实也挺好用的，工作时在线上环境不方便安装emacs以及他的一大堆插件，这时候vim就派上用场啦，所以熟悉vim的键位还是很重要的。<br>为了让自己的记忆成本最低，我觉得一定要抽空转spacemacs，尝试过两三次，还是没办法习惯。<br>因为我使用emacs比较重要的一个原因是eshell，可以很方便的操作光标进行各种复制粘贴操作，spaceemacs似乎对eshell不太友好。<br>spaceemacs的键位绑定也看得云里雾里的，还弄出了一个layer概念，不知道要怎么弄。<br>其实，我只需要把现在prelude 这一套的键位照搬到spacemacs应该就可以用得比较舒服了。得找时间试试看。<br>还有我自己的一些emacs私有配置因为换工作换电脑也弄丢了，挺可惜的。</p>
+<p>emacs 用了这么久，总体来说挺方便，就是有一点不爽，缺少了回到光标之前所在的位置这个功能，几年前还在用vs的时候，这个功能可是相当好用啊，后来转linux，用了emacs后，似乎就没有用过这个功能了，曾经找了一阵子也没找到提供光标历史位置跳转的插件。所以现在我要先预测我下一步要跳到很远的地方，比如我现在的文件总共有1000行，我现在在500行，需要跳转到当前文件的某个函数，在第10行，那么我就只能C+x r spc a，来保存当前光标位置为a，然后再M+g g 10 到第10行，看完这个函数后再 C+x r j a 跳回去。太不方便了。<br>如果有插件可以根据光标停留的秒数来记录光标的位置，一个快捷键就可以回到光标的上一个位置，另一个快捷键前进到光标的下一个位置，类似于undo，redo。这样就方便多了。<br>我相信这么一个成熟的需求肯定有插件，只是我一直没找到。</p>
+<p>有时间我再去找找，找到再回来发博客。</p>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;最近发现vim的键位其实也挺好用的，工作时在线上环境不方便安装emacs以及他的一大堆插件，这时候vim就派上用场啦，所以熟悉vim的键位还是很重要的。&lt;br&gt;为了让自己的记忆成本最低，我觉得一定要抽空转spacemacs，尝试过两三次，还是没办法习惯。&lt;br&gt;因为我使用e
+    
+    </summary>
+    
+    
+      <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
+    
+      <category term="emacs" scheme="http://lida.site/tags/emacs/"/>
+    
+      <category term="vim" scheme="http://lida.site/tags/vim/"/>
+    
+      <category term="编辑器" scheme="http://lida.site/tags/%E7%BC%96%E8%BE%91%E5%99%A8/"/>
+    
+      <category term="ide" scheme="http://lida.site/tags/ide/"/>
+    
+  </entry>
+  
+</feed>
