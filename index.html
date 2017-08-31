@@ -159,6 +159,108 @@
           <div id="js-content" class="content-ll">
             
   
+    <article id="post-how-to-fix-libmysqlclient-init-crash-in-multithreading-environment" class="article article-type-post  article-index" itemscope itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2017/08/31/how-to-fix-libmysqlclient-init-crash-in-multithreading-environment/">解决libmysqlclient在多线程环境下初始化会有几率crash的问题</a>
+    </h1>
+  
+
+        
+        <a href="/2017/08/31/how-to-fix-libmysqlclient-init-crash-in-multithreading-environment/" class="archive-article-date">
+  	<time datetime="2017-08-31T07:38:41.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2017-08-31</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <p>这个问题在<a href="/2017/08/28/fix-mysql-c-connector-driver-crash-on-mysql-options-with-multithreading/" title="之前的一篇文章">之前的一篇文章</a>中提到过,通过更换libmysqlclient的版本暂时规避了这个问题,但是后面使用过程中发现,其实还是不对的,启动时mysql_init有几率会返回一个空指针,后面的逻辑就走不下去了.所以怀疑这个问题其实和库的版本无关, 换了个库版本只是让问题的表现形式不同了而已.</p>
+<p>上mysql官网继续查阅文档,发现一篇文档如下:</p>
+<blockquote>
+<p><a href="https://dev.mysql.com/doc/refman/5.7/en/mysql-init.html" target="_blank" rel="external">https://dev.mysql.com/doc/refman/5.7/en/mysql-init.html</a><br>In a nonmulti-threaded environment, mysql_init() invokes mysql_library_init() automatically as necessary. However, mysql_library_init() is not thread-safe in a multi-threaded environment, and thus neither is mysql_init(). Before calling mysql_init(), either call mysql_library_init() prior to spawning any threads, or use a mutex to protect the mysql_library_init() call. This should be done prior to any other client library call.</p>
+</blockquote>
+<p>大概意思是 mysql_init 会检查 mysql_library_init这个函数是否有调用过,如果没调用过就会去调用一次, 而mysql_library_init这个函数不是线程安全的,所以导致mysql_init 也不是线程安全的, 所以需要在调用libmysqlclient 库里面的任何一个函数之前调用mysql_library_init, 用面向对象的思想来理解,就类似于单例模式的主动初始化.</p>
+<p>为了验证问题是否被解决,我写了如下测试代码:<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div></pre></td><td class="code"><pre><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> dbname = <span class="string">"testdb"</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> ip = <span class="string">"192.168.0.1"</span>;</div><div class="line"><span class="keyword">int</span> port = <span class="number">3306</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> username = <span class="string">"testuser1"</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> password = <span class="string">"asdfgh"</span>;</div><div class="line"></div><div class="line"><span class="built_in">std</span>::<span class="built_in">vector</span>&lt;<span class="built_in">std</span>::<span class="built_in">shared_ptr</span>&lt;<span class="built_in">std</span>::thread&gt;&gt; threads;</div><div class="line"><span class="keyword">for</span>(<span class="keyword">auto</span> i = <span class="number">0</span>; i != <span class="number">100</span>; ++i) &#123;</div><div class="line">  <span class="keyword">auto</span> pThread = <span class="built_in">std</span>::make_shared&lt;<span class="built_in">std</span>::thread&gt;([&amp;]()&#123;</div><div class="line">      <span class="built_in">std</span>::<span class="built_in">shared_ptr</span>&lt;TC_Mysql&gt; pMysqlConn(<span class="keyword">new</span> TC_Mysql(ip, username, password, dbname, <span class="string">"utf8"</span>, port));</div><div class="line">      pMysqlConn-&gt;connect();</div><div class="line">      DEBUGLOG &lt;&lt; <span class="string">"mysql connected"</span> &lt;&lt; <span class="built_in">std</span>::<span class="built_in">endl</span>;</div><div class="line">    &#125;);</div><div class="line">  threads.emplace_back(pThread);</div><div class="line">&#125;</div><div class="line"><span class="keyword">for</span>(<span class="keyword">auto</span> pT : threads) &#123;</div><div class="line">  pT-&gt;join();</div><div class="line">&#125;</div></pre></td></tr></table></figure></p>
+<p>上面的代码开启了100个线程,每个线程内只做一件事,就是创建一个mysql连接并连接到mysql服务器.</p>
+<p>毫无悬念的,直接执行会导致crash.</p>
+<p>现在,把他修改一下:</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div></pre></td><td class="code"><pre><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> dbname = <span class="string">"testdb"</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> ip = <span class="string">"192.168.0.1"</span>;</div><div class="line"><span class="keyword">int</span> port = <span class="number">3306</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> username = <span class="string">"testuser1"</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> password = <span class="string">"asdfgh"</span>;</div><div class="line">mysql_library_init(<span class="number">0</span>, <span class="literal">NULL</span>, <span class="literal">NULL</span>);  <span class="comment">//这里增加了一行libmysqlclient库初始化代码</span></div><div class="line"><span class="built_in">std</span>::<span class="built_in">vector</span>&lt;<span class="built_in">std</span>::<span class="built_in">shared_ptr</span>&lt;<span class="built_in">std</span>::thread&gt;&gt; threads;</div><div class="line"><span class="keyword">for</span>(<span class="keyword">auto</span> i = <span class="number">0</span>; i != <span class="number">100</span>; ++i) &#123;</div><div class="line">  <span class="keyword">auto</span> pThread = <span class="built_in">std</span>::make_shared&lt;<span class="built_in">std</span>::thread&gt;([&amp;]()&#123;</div><div class="line">      <span class="built_in">std</span>::<span class="built_in">shared_ptr</span>&lt;TC_Mysql&gt; pMysqlConn(<span class="keyword">new</span> TC_Mysql(ip, username, password, dbname, <span class="string">"utf8"</span>, port));</div><div class="line">      pMysqlConn-&gt;connect();</div><div class="line">      DEBUGLOG &lt;&lt; <span class="string">"mysql connected"</span> &lt;&lt; <span class="built_in">std</span>::<span class="built_in">endl</span>;</div><div class="line">    &#125;);</div><div class="line">  threads.emplace_back(pThread);</div><div class="line">&#125;</div><div class="line"><span class="keyword">for</span>(<span class="keyword">auto</span> pT : threads) &#123;</div><div class="line">  pT-&gt;join();</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>在创建连接之前调用  mysql_library_init 函数,编译运行后发现可以成功创建连接,程序不会crash.</p>
+<p>至此这个问题算是最终解决了.</p>
+
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+	<div class="article-tag tagcloud">
+		<i class="icon-price-tags icon"></i>
+		<ul class="article-tag-list">
+			 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">mysql</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">crash</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color5">libmysqlclient</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color2">ubuntu</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">随笔</a>
+        		</li>
+      		
+		</ul>
+	</div>
+
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2017/08/31/how-to-fix-libmysqlclient-init-crash-in-multithreading-environment/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
     <article id="post-how-to-find-a-command-depends-of" class="article article-type-post  article-index" itemscope itemprop="blogPost">
   <div class="article-inner">
     
@@ -281,6 +383,7 @@
 <p><a href="https://cdn.mysql.com//Downloads/Connector-C/mysql-connector-c-6.1.11-linux-glibc2.12-x86_64.tar.gz" target="_blank" rel="external">https://cdn.mysql.com//Downloads/Connector-C/mysql-connector-c-6.1.11-linux-glibc2.12-x86_64.tar.gz</a></p>
 </blockquote>
 <p>没想到作为LTS版本的ubuntu官方软件库提供的库会有这么严重的bug, 看样子以后所有的库要尽量用官方发布的版本.</p>
+<p>2017-08-31 增加:<br>后面发现通过更换libmysqlclient版本并不能解决问题,只是让问题的表现形式变得不同了, 彻底解决这个问题请看<a href="/2017/08/31/how-to-fix-libmysqlclient-init-crash-in-multithreading-environment/" title="这里">这里</a>.</p>
 
       
 
@@ -588,15 +691,15 @@
         		</li>
       		 
         		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">vim</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
         			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">编辑器</a>
         		</li>
       		 
         		<li class="article-tag-list-item">
         			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">ide</a>
-        		</li>
-      		 
-        		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">vim</a>
         		</li>
       		
 		</ul>
@@ -749,6 +852,22 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color1">emacs</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color4">vim</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color4">编辑器</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color4">ide</a>
+              </li>
+             
+              <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color3">apt-get</a>
               </li>
              
@@ -762,22 +881,6 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color4">fc-cache</a>
-              </li>
-             
-              <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color1">emacs</a>
-              </li>
-             
-              <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color4">编辑器</a>
-              </li>
-             
-              <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color4">ide</a>
-              </li>
-             
-              <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color4">vim</a>
               </li>
             
             <div class="clearfix"></div>

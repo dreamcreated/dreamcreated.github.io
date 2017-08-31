@@ -6,20 +6,20 @@
   <meta name="renderer" content="webkit">
   <meta http-equiv="X-UA-Compatible" content="IE=edge" >
   <link rel="dns-prefetch" href="http://lida.site">
-  <title>在emacs中跳转光标到之前所在位置的几个方法 | Dream Creator&#39;s blog</title>
+  <title>解决libmysqlclient在多线程环境下初始化会有几率crash的问题 | Dream Creator&#39;s blog</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="仔细找了一下,有几个命令可以提供类似的功能:  pop-global-mark C-x C-SPC  这个命令提供了全局跳转到光标之前所在位置的功能,实际上这里也会有一个光标位置的list, 我安装了helm插件,所以有命令helm-global-mark-ring可以查看当前保存了哪些位置,这些位置信息就是一个环形队列, 使用pop-global-mark 来pop这个队列的最后一个元素,然后跳">
-<meta name="keywords" content="随笔,emacs,编辑器,ide">
+  <meta name="description" content="这个问题在之前的一篇文章中提到过,通过更换libmysqlclient的版本暂时规避了这个问题,但是后面使用过程中发现,其实还是不对的,启动时mysql_init有几率会返回一个空指针,后面的逻辑就走不下去了.所以怀疑这个问题其实和库的版本无关, 换了个库版本只是让问题的表现形式不同了而已. 上mysql官网继续查阅文档,发现一篇文档如下:  https://dev.mysql.com/doc/r">
+<meta name="keywords" content="mysql,crash,libmysqlclient,ubuntu,随笔">
 <meta property="og:type" content="article">
-<meta property="og:title" content="在emacs中跳转光标到之前所在位置的几个方法">
-<meta property="og:url" content="http://lida.site/2017/08/22/how-to-jump-to-previous-position-in-emacs/index.html">
+<meta property="og:title" content="解决libmysqlclient在多线程环境下初始化会有几率crash的问题">
+<meta property="og:url" content="http://lida.site/2017/08/31/how-to-fix-libmysqlclient-init-crash-in-multithreading-environment/index.html">
 <meta property="og:site_name" content="Dream Creator&#39;s blog">
-<meta property="og:description" content="仔细找了一下,有几个命令可以提供类似的功能:  pop-global-mark C-x C-SPC  这个命令提供了全局跳转到光标之前所在位置的功能,实际上这里也会有一个光标位置的list, 我安装了helm插件,所以有命令helm-global-mark-ring可以查看当前保存了哪些位置,这些位置信息就是一个环形队列, 使用pop-global-mark 来pop这个队列的最后一个元素,然后跳">
+<meta property="og:description" content="这个问题在之前的一篇文章中提到过,通过更换libmysqlclient的版本暂时规避了这个问题,但是后面使用过程中发现,其实还是不对的,启动时mysql_init有几率会返回一个空指针,后面的逻辑就走不下去了.所以怀疑这个问题其实和库的版本无关, 换了个库版本只是让问题的表现形式不同了而已. 上mysql官网继续查阅文档,发现一篇文档如下:  https://dev.mysql.com/doc/r">
 <meta property="og:locale" content="zh-CN">
-<meta property="og:updated_time" content="2017-08-25T03:30:48.874Z">
+<meta property="og:updated_time" content="2017-08-31T08:03:03.473Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="在emacs中跳转光标到之前所在位置的几个方法">
-<meta name="twitter:description" content="仔细找了一下,有几个命令可以提供类似的功能:  pop-global-mark C-x C-SPC  这个命令提供了全局跳转到光标之前所在位置的功能,实际上这里也会有一个光标位置的list, 我安装了helm插件,所以有命令helm-global-mark-ring可以查看当前保存了哪些位置,这些位置信息就是一个环形队列, 使用pop-global-mark 来pop这个队列的最后一个元素,然后跳">
+<meta name="twitter:title" content="解决libmysqlclient在多线程环境下初始化会有几率crash的问题">
+<meta name="twitter:description" content="这个问题在之前的一篇文章中提到过,通过更换libmysqlclient的版本暂时规避了这个问题,但是后面使用过程中发现,其实还是不对的,启动时mysql_init有几率会返回一个空指针,后面的逻辑就走不下去了.所以怀疑这个问题其实和库的版本无关, 换了个库版本只是让问题的表现形式不同了而已. 上mysql官网继续查阅文档,发现一篇文档如下:  https://dev.mysql.com/doc/r">
   
     <link rel="alternative" href="/atom.xml" title="Dream Creator&#39;s blog" type="application/atom+xml">
   
@@ -159,41 +159,39 @@
             <canvas data-colors="#eaeaea" data-sectionHeight="100" data-contentId="js-content" id="myCanvas1" class="anm-canvas"></canvas>
           </div>
           <div id="js-content" class="content-ll">
-            <article id="post-how-to-jump-to-previous-position-in-emacs" class="article article-type-post " itemscope itemprop="blogPost">
+            <article id="post-how-to-fix-libmysqlclient-init-crash-in-multithreading-environment" class="article article-type-post " itemscope itemprop="blogPost">
   <div class="article-inner">
     
       <header class="article-header">
         
   
     <h1 class="article-title" itemprop="name">
-      在emacs中跳转光标到之前所在位置的几个方法
+      解决libmysqlclient在多线程环境下初始化会有几率crash的问题
     </h1>
   
 
         
-        <a href="/2017/08/22/how-to-jump-to-previous-position-in-emacs/" class="archive-article-date">
-  	<time datetime="2017-08-22T09:18:11.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2017-08-22</time>
+        <a href="/2017/08/31/how-to-fix-libmysqlclient-init-crash-in-multithreading-environment/" class="archive-article-date">
+  	<time datetime="2017-08-31T07:38:41.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2017-08-31</time>
 </a>
         
       </header>
     
     <div class="article-entry" itemprop="articleBody">
       
-        <p>仔细找了一下,有几个命令可以提供类似的功能:</p>
+        <p>这个问题在<a href="/2017/08/28/fix-mysql-c-connector-driver-crash-on-mysql-options-with-multithreading/" title="之前的一篇文章">之前的一篇文章</a>中提到过,通过更换libmysqlclient的版本暂时规避了这个问题,但是后面使用过程中发现,其实还是不对的,启动时mysql_init有几率会返回一个空指针,后面的逻辑就走不下去了.所以怀疑这个问题其实和库的版本无关, 换了个库版本只是让问题的表现形式不同了而已.</p>
+<p>上mysql官网继续查阅文档,发现一篇文档如下:</p>
 <blockquote>
-<p>pop-global-mark C-x C-SPC</p>
+<p><a href="https://dev.mysql.com/doc/refman/5.7/en/mysql-init.html" target="_blank" rel="external">https://dev.mysql.com/doc/refman/5.7/en/mysql-init.html</a><br>In a nonmulti-threaded environment, mysql_init() invokes mysql_library_init() automatically as necessary. However, mysql_library_init() is not thread-safe in a multi-threaded environment, and thus neither is mysql_init(). Before calling mysql_init(), either call mysql_library_init() prior to spawning any threads, or use a mutex to protect the mysql_library_init() call. This should be done prior to any other client library call.</p>
 </blockquote>
-<p>这个命令提供了全局跳转到光标之前所在位置的功能,实际上这里也会有一个光标位置的list, 我安装了helm插件,所以有命令helm-global-mark-ring可以查看当前保存了哪些位置,这些位置信息就是一个环形队列, 使用pop-global-mark 来pop这个队列的最后一个元素,然后跳转过去.<br>试用后发现这个命令只有在显式使用C+SPC 进行 mark 操作并且马上切换到其他buffer时才会记录之前的位置, 而且同一个buffer记录的位置如果不pop掉,那么下次在同一个buffer内mark 其他位置也不会被放到global-mark-ring里面<br>用法比较奇怪.因为buffer之间的切换本来就很简单,C-x C-b 可以很方便的浏览所有的buffer并切换，切换buffer之前mark一下有点累赘了,所以个人感觉还是下一个命令适用范围比较广.</p>
-<blockquote>
-<p>C-u C-SPC</p>
-</blockquote>
-<p>这个命令会记录你的每次移动之前的位置,随便翻页,或者慢速上下移动光标,都会被记录,但是仅限当前buffer. 很多场景下也够用了, 如果安装了helm插件，可以通过helm-all-mark-rings来观察记录的位置</p>
-<blockquote>
-<p>helm-all-mark-rings</p>
-</blockquote>
-<p>这个命令可以很方便的查看当前所有的mark,当按快捷键得到的结果不符合预期时,可以再通过这个命令找到正确的跳转地址.</p>
-<p>通过这三个命令应该可以更方便的在各种文件中jump了。</p>
-<p>ps: 如果helm出现了两个结果列表(例如helm-all-mark-rings),可以使用C-o和M-o来切换列表, 前者表示next, 后者表示previous.</p>
+<p>大概意思是 mysql_init 会检查 mysql_library_init这个函数是否有调用过,如果没调用过就会去调用一次, 而mysql_library_init这个函数不是线程安全的,所以导致mysql_init 也不是线程安全的, 所以需要在调用libmysqlclient 库里面的任何一个函数之前调用mysql_library_init, 用面向对象的思想来理解,就类似于单例模式的主动初始化.</p>
+<p>为了验证问题是否被解决,我写了如下测试代码:<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div></pre></td><td class="code"><pre><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> dbname = <span class="string">"testdb"</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> ip = <span class="string">"192.168.0.1"</span>;</div><div class="line"><span class="keyword">int</span> port = <span class="number">3306</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> username = <span class="string">"testuser1"</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> password = <span class="string">"asdfgh"</span>;</div><div class="line"></div><div class="line"><span class="built_in">std</span>::<span class="built_in">vector</span>&lt;<span class="built_in">std</span>::<span class="built_in">shared_ptr</span>&lt;<span class="built_in">std</span>::thread&gt;&gt; threads;</div><div class="line"><span class="keyword">for</span>(<span class="keyword">auto</span> i = <span class="number">0</span>; i != <span class="number">100</span>; ++i) &#123;</div><div class="line">  <span class="keyword">auto</span> pThread = <span class="built_in">std</span>::make_shared&lt;<span class="built_in">std</span>::thread&gt;([&amp;]()&#123;</div><div class="line">      <span class="built_in">std</span>::<span class="built_in">shared_ptr</span>&lt;TC_Mysql&gt; pMysqlConn(<span class="keyword">new</span> TC_Mysql(ip, username, password, dbname, <span class="string">"utf8"</span>, port));</div><div class="line">      pMysqlConn-&gt;connect();</div><div class="line">      DEBUGLOG &lt;&lt; <span class="string">"mysql connected"</span> &lt;&lt; <span class="built_in">std</span>::<span class="built_in">endl</span>;</div><div class="line">    &#125;);</div><div class="line">  threads.emplace_back(pThread);</div><div class="line">&#125;</div><div class="line"><span class="keyword">for</span>(<span class="keyword">auto</span> pT : threads) &#123;</div><div class="line">  pT-&gt;join();</div><div class="line">&#125;</div></pre></td></tr></table></figure></p>
+<p>上面的代码开启了100个线程,每个线程内只做一件事,就是创建一个mysql连接并连接到mysql服务器.</p>
+<p>毫无悬念的,直接执行会导致crash.</p>
+<p>现在,把他修改一下:</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div></pre></td><td class="code"><pre><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> dbname = <span class="string">"testdb"</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> ip = <span class="string">"192.168.0.1"</span>;</div><div class="line"><span class="keyword">int</span> port = <span class="number">3306</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> username = <span class="string">"testuser1"</span>;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">string</span> password = <span class="string">"asdfgh"</span>;</div><div class="line">mysql_library_init(<span class="number">0</span>, <span class="literal">NULL</span>, <span class="literal">NULL</span>);  <span class="comment">//这里增加了一行libmysqlclient库初始化代码</span></div><div class="line"><span class="built_in">std</span>::<span class="built_in">vector</span>&lt;<span class="built_in">std</span>::<span class="built_in">shared_ptr</span>&lt;<span class="built_in">std</span>::thread&gt;&gt; threads;</div><div class="line"><span class="keyword">for</span>(<span class="keyword">auto</span> i = <span class="number">0</span>; i != <span class="number">100</span>; ++i) &#123;</div><div class="line">  <span class="keyword">auto</span> pThread = <span class="built_in">std</span>::make_shared&lt;<span class="built_in">std</span>::thread&gt;([&amp;]()&#123;</div><div class="line">      <span class="built_in">std</span>::<span class="built_in">shared_ptr</span>&lt;TC_Mysql&gt; pMysqlConn(<span class="keyword">new</span> TC_Mysql(ip, username, password, dbname, <span class="string">"utf8"</span>, port));</div><div class="line">      pMysqlConn-&gt;connect();</div><div class="line">      DEBUGLOG &lt;&lt; <span class="string">"mysql connected"</span> &lt;&lt; <span class="built_in">std</span>::<span class="built_in">endl</span>;</div><div class="line">    &#125;);</div><div class="line">  threads.emplace_back(pThread);</div><div class="line">&#125;</div><div class="line"><span class="keyword">for</span>(<span class="keyword">auto</span> pT : threads) &#123;</div><div class="line">  pT-&gt;join();</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>在创建连接之前调用  mysql_library_init 函数,编译运行后发现可以成功创建连接,程序不会crash.</p>
+<p>至此这个问题算是最终解决了.</p>
 
       
 
@@ -233,19 +231,23 @@
 		<ul class="article-tag-list">
 			 
         		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">mysql</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">crash</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color5">libmysqlclient</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color2">ubuntu</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
         			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">随笔</a>
-        		</li>
-      		 
-        		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">emacs</a>
-        		</li>
-      		 
-        		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">编辑器</a>
-        		</li>
-      		 
-        		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">ide</a>
         		</li>
       		
 		</ul>
@@ -301,7 +303,7 @@
     <a class="close js-modal-close" href="javascript:;"><i class="icon icon-close"></i></a>
     <p>扫一扫，分享到微信</p>
     <div class="wx-qrcode">
-      <img src="http://s.jiathis.com/qrcode.php?url=http://lida.site/2017/08/22/how-to-jump-to-previous-position-in-emacs/" alt="微信分享二维码">
+      <img src="http://s.jiathis.com/qrcode.php?url=http://lida.site/2017/08/31/how-to-fix-libmysqlclient-init-crash-in-multithreading-environment/" alt="微信分享二维码">
     </div>
 </div>
 
@@ -315,18 +317,9 @@
   
 <nav id="article-nav">
   
-    <a href="/2017/08/25/how-to-install-adobe-source-code-pro-in-ubuntu/" id="article-nav-newer" class="article-nav-link-wrap">
-      <i class="icon-circle-left"></i>
-      <div class="article-nav-title">
-        
-          在ubuntu上安装source-code-pro字体
-        
-      </div>
-    </a>
   
-  
-    <a href="/2017/08/22/new_blog_new_thought/" id="article-nav-older" class="article-nav-link-wrap">
-      <div class="article-nav-title">开了一个新的博客，在这里记录一些想法</div>
+    <a href="/2017/08/28/how-to-find-a-command-depends-of/" id="article-nav-older" class="article-nav-link-wrap">
+      <div class="article-nav-title">找到某个命令依赖的软件包名称</div>
       <i class="icon-circle-right"></i>
     </a>
   
