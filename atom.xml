@@ -6,7 +6,7 @@
   <link href="/atom.xml" rel="self"/>
   
   <link href="http://lida.site/"/>
-  <updated>2017-08-31T08:03:03.473Z</updated>
+  <updated>2017-09-28T08:12:31.115Z</updated>
   <id>http://lida.site/</id>
   
   <author>
@@ -15,6 +15,33 @@
   </author>
   
   <generator uri="http://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>使用tcpdump抓包并通过wireshark图形化工具来分析网络问题</title>
+    <link href="http://lida.site/2017/09/28/%E4%BD%BF%E7%94%A8tcpdump%E6%8A%93%E5%8C%85%E5%B9%B6%E9%80%9A%E8%BF%87wireshark%E5%9B%BE%E5%BD%A2%E5%8C%96%E5%B7%A5%E5%85%B7%E6%9D%A5%E5%88%86%E6%9E%90%E7%BD%91%E7%BB%9C%E9%97%AE%E9%A2%98/"/>
+    <id>http://lida.site/2017/09/28/使用tcpdump抓包并通过wireshark图形化工具来分析网络问题/</id>
+    <published>2017-09-28T06:03:38.000Z</published>
+    <updated>2017-09-28T08:12:31.115Z</updated>
+    
+    <content type="html"><![CDATA[<h1 id="发现问题"><a href="#发现问题" class="headerlink" title="发现问题"></a>发现问题</h1><p>最近后台告警信息比较多, 大概看了一下, 发现一些很正常的请求偶尔会有几百毫秒甚至一两秒的耗时. 分析了一下代码, 应该不是代码的问题, 于是在mysql创建连接处加了一个耗时统计, 果然, 罪魁祸首就是创建mysql连接导致的.</p><h1 id="编写test重现问题"><a href="#编写test重现问题" class="headerlink" title="编写test重现问题"></a>编写test重现问题</h1><p>为了确认是否是单纯的创建mysql连接导致,而不是其他的因素影响,我单独写了一个 shell 脚本, 不停的创建连接,然后统计耗时,一旦超过预设值100ms就打印告警信息并停下来. 执行脚本,果然与预想中的一样,创建了几千个连接后,就出现了一个耗时特别长的请求.</p><p>先使用tcpdump开始抓包,然后执行脚本.<br>因为测试脚本的逻辑是一旦发现耗时过长的连接,马上停止执行,所以针对端口进行抓包,最后几个包一定是有问题的.</p><p>脚本代码如下:</p><figure class="highlight shell"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div><div class="line">39</div><div class="line">40</div></pre></td><td class="code"><pre><div class="line"><span class="meta">#</span>!/bin/bash</div><div class="line"></div><div class="line"><span class="meta">#</span> arg1=start, arg2=end, format: %s.%N</div><div class="line">function getTiming() &#123;</div><div class="line">    start=$1</div><div class="line">    end=$2</div><div class="line"></div><div class="line">    start_s=$(echo $start | cut -d '.' -f 1)</div><div class="line">    start_ns=$(echo $start | cut -d '.' -f 2)</div><div class="line">    end_s=$(echo $end | cut -d '.' -f 1)</div><div class="line">    end_ns=$(echo $end | cut -d '.' -f 2)</div><div class="line"></div><div class="line"></div><div class="line"><span class="meta">#</span> for debug..</div><div class="line"><span class="meta">#</span>    echo $start</div><div class="line"><span class="meta">#</span>    echo $end</div><div class="line"></div><div class="line"></div><div class="line">    time=$(( ( 10#$end_s - 10#$start_s ) * 1000 + ( 10#$end_ns / 1000000 - 10#$start_ns / 1000000 ) ))</div><div class="line"></div><div class="line"></div><div class="line">echo $time</div><div class="line">&#125;</div><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div><div class="line">for a in $(seq 1 10000)</div><div class="line">do</div><div class="line">start=$(date +%s.%N)</div><div class="line">/usr/bin/mysql -utest -p123456  -h 192.168.0.11 -Dtestdb -e "quit" &gt; /dev/null 2&amp;&gt;1</div><div class="line">end=$(date +%s.%N)</div><div class="line">elapsed=`getTiming $start $end`</div><div class="line">if [ $elapsed -gt 100 ]</div><div class="line">then</div><div class="line">echo $start "elapsed:" $elapsed</div><div class="line">exit</div><div class="line">fi</div><div class="line">done</div></pre></td></tr></table></figure><p>抓包命令:</p><figure class="highlight shell"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">sudo tcpdump -i any -s 0 -w /var/tmp/1.cap port 3306</div></pre></td></tr></table></figure><p>抓到包后发现,很难找到真正耗时的那个请求,因为创建的连接数太多了,而每一个请求并没有表示耗时的属性,只能通过肉眼观察一个回报和其对应的请求之间相隔多久来得出耗时. 而且不知道为什么, 脚本中的这一行代码</p><figure class="highlight shell"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">/usr/bin/mysql -utest -p123456  -h 192.168.0.11 -Dtestdb -e "quit" &gt; /dev/null 2&amp;&gt;1</div></pre></td></tr></table></figure><p>在抓包信息中显示,找不到db 2 这个库. -e “quit” 会导致这个错误,也不知怎么回事.</p><p>最后想到一个办法,直接使用C++写客户端,虽然麻烦一点,但是可以知道出问题的连接的端口号,这样就可以精确查找这个端口号的所有收发包了.同时也可以精确的计算一个连接创建的耗时而不是像脚本里面那样,计算了创建的耗时加上断开的耗时.</p><h1 id="使用C-编写测试客户端"><a href="#使用C-编写测试客户端" class="headerlink" title="使用C++编写测试客户端"></a>使用C++编写测试客户端</h1><p>以下代码使用了google test 框架 和 mysql c driver</p><figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">for</span>(<span class="built_in">std</span>::<span class="keyword">size_t</span> i = <span class="number">0</span>; i != <span class="number">100000</span>; ++i) &#123;</div><div class="line">  <span class="keyword">auto</span> now = TNOWMS;</div><div class="line">  <span class="keyword">auto</span> _pstMql = mysql_init(<span class="literal">NULL</span>);</div><div class="line">  <span class="keyword">auto</span> elapsed_mysql_init = TNOWMS - now;</div><div class="line">  <span class="keyword">auto</span> now1 = TNOWMS;</div><div class="line">  <span class="comment">//建立连接后, 自动调用设置字符集语句</span></div><div class="line">  <span class="keyword">if</span> (mysql_options(_pstMql, MYSQL_SET_CHARSET_NAME, <span class="string">"utf8"</span>)) &#123;</div><div class="line">    <span class="keyword">throw</span> TC_Mysql_Exception(<span class="built_in">string</span>(<span class="string">"TC_Mysql::connect: mysql_options MYSQL_SET_CHARSET_NAME "</span>) + <span class="string">"utf8"</span> + <span class="string">":"</span> + <span class="built_in">string</span>(mysql_error(_pstMql)));</div><div class="line">  &#125;</div><div class="line">  <span class="keyword">auto</span> elapsed_options = TNOWMS - now1;</div><div class="line">  <span class="keyword">auto</span> now2 = TNOWMS;</div><div class="line">  <span class="keyword">if</span> (mysql_real_connect(_pstMql, <span class="string">"192.168.0.11"</span>, <span class="string">"test"</span>, <span class="string">"123456"</span>, <span class="literal">NULL</span>, (<span class="keyword">int</span>)<span class="number">3306</span>, <span class="literal">NULL</span>, <span class="number">0</span>) == <span class="literal">NULL</span>) &#123;</div><div class="line">    <span class="keyword">throw</span> TC_Mysql_Exception(<span class="string">"[TC_Mysql::connect]: mysql_real_connect: "</span> + <span class="built_in">string</span>(mysql_error(_pstMql)));</div><div class="line">  &#125;</div><div class="line">  <span class="keyword">auto</span> elapsed_conn = TNOWMS - now2;</div><div class="line">  <span class="keyword">auto</span> elapsed = TNOWMS - now;</div><div class="line">  <span class="keyword">if</span> (elapsed &gt; <span class="number">500</span>) &#123;  <span class="comment">//如果创建连接耗时500以上</span></div><div class="line">    <span class="keyword">auto</span> localIpPort = getIPHostBySocketFD(_pstMql-&gt;net.fd, <span class="literal">true</span>);  <span class="comment">//获取当前连接的local port和peer port</span></div><div class="line">    <span class="keyword">auto</span> peerIpPort = getIPHostBySocketFD(_pstMql-&gt;net.fd, <span class="literal">false</span>);</div><div class="line">    DEBUGLOG &lt;&lt; <span class="string">"local|"</span> &lt;&lt; <span class="built_in">std</span>::get&lt;<span class="number">0</span>&gt;(localIpPort) &lt;&lt; <span class="string">"|"</span> &lt;&lt; <span class="built_in">std</span>::get&lt;<span class="number">1</span>&gt;(localIpPort) &lt;&lt; <span class="string">"|peer|"</span> &lt;&lt; <span class="built_in">std</span>::get&lt;<span class="number">0</span>&gt;(peerIpPort) &lt;&lt; <span class="string">"|"</span> &lt;&lt; <span class="built_in">std</span>::get&lt;<span class="number">1</span>&gt;(peerIpPort) &lt;&lt; <span class="string">"|mysql_init|"</span> &lt;&lt; elapsed_mysql_init &lt;&lt; <span class="string">"|elapsed_options|"</span> &lt;&lt; elapsed_options &lt;&lt; <span class="string">"|elapsed_connect|"</span> &lt;&lt; elapsed_conn &lt;&lt; <span class="built_in">std</span>::<span class="built_in">endl</span>;</div><div class="line">  &#125;</div><div class="line">  ASSERT_LT(elapsed, <span class="number">500</span>);</div><div class="line">  mysql_close(_pstMql);</div><div class="line">&#125;</div></pre></td></tr></table></figure><p>编译执行之后, 捕获到了一个端口号为 58818 连接耗时过高</p><img src="/2017/09/28/使用tcpdump抓包并通过wireshark图形化工具来分析网络问题/wireshark.png" alt="[wireshark]" title="[wireshark]"><p>通过以上截图中的时间可以看到, 主要是 Mysql协议的登录请求导致耗时过高.</p><p>接下来,就可以去查查Mysql登录的回包为啥会这么慢了.抓包这部分的工作就算是完成了.</p>]]></content>
+    
+    <summary type="html">
+    
+      
+      
+        &lt;h1 id=&quot;发现问题&quot;&gt;&lt;a href=&quot;#发现问题&quot; class=&quot;headerlink&quot; title=&quot;发现问题&quot;&gt;&lt;/a&gt;发现问题&lt;/h1&gt;&lt;p&gt;最近后台告警信息比较多, 大概看了一下, 发现一些很正常的请求偶尔会有几百毫秒甚至一两秒的耗时. 分析了一下代码, 应该不是
+      
+    
+    </summary>
+    
+    
+      <category term="抓包" scheme="http://lida.site/tags/%E6%8A%93%E5%8C%85/"/>
+    
+      <category term="tcpdump" scheme="http://lida.site/tags/tcpdump/"/>
+    
+      <category term="wireshark" scheme="http://lida.site/tags/wireshark/"/>
+    
+  </entry>
   
   <entry>
     <title>解决libmysqlclient在多线程环境下初始化会有几率crash的问题</title>
@@ -35,15 +62,15 @@
     </summary>
     
     
+      <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
+    
+      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
+    
       <category term="mysql" scheme="http://lida.site/tags/mysql/"/>
     
       <category term="crash" scheme="http://lida.site/tags/crash/"/>
     
       <category term="libmysqlclient" scheme="http://lida.site/tags/libmysqlclient/"/>
-    
-      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
-    
-      <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
     
   </entry>
   
@@ -68,9 +95,9 @@
     
       <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
     
-      <category term="apt-get" scheme="http://lida.site/tags/apt-get/"/>
-    
       <category term="linux" scheme="http://lida.site/tags/linux/"/>
+    
+      <category term="apt-get" scheme="http://lida.site/tags/apt-get/"/>
     
   </entry>
   
@@ -93,15 +120,15 @@
     </summary>
     
     
+      <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
+    
+      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
+    
       <category term="mysql" scheme="http://lida.site/tags/mysql/"/>
     
       <category term="crash" scheme="http://lida.site/tags/crash/"/>
     
       <category term="libmysqlclient" scheme="http://lida.site/tags/libmysqlclient/"/>
-    
-      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
-    
-      <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
     
   </entry>
   
@@ -126,13 +153,13 @@
     </summary>
     
     
-      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
-    
       <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
     
-      <category term="linux" scheme="http://lida.site/tags/linux/"/>
-    
       <category term="字体" scheme="http://lida.site/tags/%E5%AD%97%E4%BD%93/"/>
+    
+      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
+    
+      <category term="linux" scheme="http://lida.site/tags/linux/"/>
     
       <category term="fc-cache" scheme="http://lida.site/tags/fc-cache/"/>
     
