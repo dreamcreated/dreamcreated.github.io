@@ -254,11 +254,11 @@
     
       <category term="emacs" scheme="http://lida.site/tags/emacs/"/>
     
-      <category term="vim" scheme="http://lida.site/tags/vim/"/>
-    
       <category term="编辑器" scheme="http://lida.site/tags/%E7%BC%96%E8%BE%91%E5%99%A8/"/>
     
       <category term="ide" scheme="http://lida.site/tags/ide/"/>
+    
+      <category term="vim" scheme="http://lida.site/tags/vim/"/>
     
   </entry>
   
