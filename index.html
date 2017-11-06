@@ -155,6 +155,127 @@
           <div id="js-content" class="content-ll">
             
   
+    <article id="post-通过使用C++变参模板动态生成重载函数来解决Tars框架的消息转发问题" class="article article-type-post  article-index" itemscope itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2017/11/02/通过使用C++变参模板动态生成重载函数来解决Tars框架的消息转发问题/">通过使用C++变参模板动态生成重载函数来解决Tars框架的消息转发问题</a>
+    </h1>
+  
+
+        
+        <a href="/2017/11/02/通过使用C++变参模板动态生成重载函数来解决Tars框架的消息转发问题/" class="archive-article-date">
+  	<time datetime="2017-11-02T02:38:12.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2017-11-02</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <h1 id="Fantastic"><a href="#Fantastic" class="headerlink" title="Fantastic"></a>Fantastic</h1><p>C++14有很多新特性,但是最让人着迷的,莫过于变参模板了,变参模板把函数式的编程思想在C++中发挥得淋漓尽致,让C++的灵活性提升了一个level,使用变参模板,可以写出看起来像是动态语言特性的代码.<br>最近遇到一个问题,如果没有变参模板,还真不知道该如何解决.</p>
+<h1 id="Question"><a href="#Question" class="headerlink" title="Question"></a>Question</h1><p>我们的后台程序使用了Tars框架,他的IDL生成出来的C++代码中,有一个Callback类用来表示异步调用的回调,定义如下:</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div></pre></td><td class="code"><pre><div class="line"><span class="class"><span class="keyword">class</span> <span class="title">FakeCallbackBase</span> &#123;</span></div><div class="line"><span class="keyword">protected</span>:</div><div class="line">    <span class="function"><span class="keyword">virtual</span> <span class="keyword">void</span> <span class="title">callback_fakeRequestName</span><span class="params">(<span class="keyword">int</span> a, <span class="keyword">const</span> FakeResponse2 &amp;a1, <span class="keyword">const</span> FakeResponse&amp; a2)</span> </span>&#123;</div><div class="line">        <span class="built_in">std</span>::<span class="built_in">cout</span> &lt;&lt; <span class="string">"no implement"</span> &lt;&lt; <span class="built_in">std</span>::<span class="built_in">endl</span>;</div><div class="line">    &#125;</div><div class="line">    <span class="function"><span class="keyword">virtual</span> <span class="keyword">void</span> <span class="title">callback_fakeRequestName_exception</span><span class="params">(<span class="keyword">int</span> a, <span class="keyword">const</span> FakeResponse2 &amp;a1, <span class="keyword">const</span> FakeResponse&amp; a2)</span> </span>&#123;</div><div class="line">        <span class="built_in">std</span>::<span class="built_in">cout</span> &lt;&lt; <span class="string">"no implement"</span> &lt;&lt; <span class="built_in">std</span>::<span class="built_in">endl</span>;</div><div class="line">    &#125;</div><div class="line">&#125;;</div></pre></td></tr></table></figure>
+<p>一眼看上去似乎也没什么问题,每个请求对应一个虚函数,要处理这个请求的callback,只需要重载对应的虚函数即可.<br>就处理业务逻辑来说,其实没啥太大问题.<br>但是,我现在要写的是一个Proxy,主要负责把内部的Tars接口使用开放的HTTP协议对外暴露,所以对每一个接口的业务逻辑都是一样的.我可不想把同一份代码不停的Copy &amp; Paste.<br>So… 我想到一个办法,变参模板!</p>
+<h1 id="Solution"><a href="#Solution" class="headerlink" title="Solution"></a>Solution</h1><p>分析上面的回调函数的定义,发现参数列表有如下规律:</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">第一个参数是RPC的返回值,类似于函数的返回值,只有一个,后面的所有参数表示的是RPC的出参,是一个*可变列表*</div></pre></td></tr></table></figure>
+<p>定义这样一个宏,方便用来给每一个RPC生成统一的Callback类</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div></pre></td><td class="code"><pre><div class="line"><span class="meta">#<span class="meta-keyword">ifndef</span> DEFINE_FORWARD_CALLBACK</span></div><div class="line"><span class="meta">#<span class="meta-keyword">define</span> DEFINE_FORWARD_CALLBACK(requestName) \</span></div><div class="line"><span class="class"><span class="keyword">class</span> <span class="title">ForwardFor_</span>##<span class="title">requestName</span> &#123;</span>     \</div><div class="line"><span class="keyword">public</span>:                              \</div><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span>... TREQS&gt; \</div><div class="line"><span class="class"><span class="keyword">class</span> <span class="title">Forward</span> &#123;</span> \</div><div class="line"><span class="keyword">public</span>: \</div><div class="line">    <span class="keyword">template</span>&lt;<span class="keyword">typename</span> TR&gt;\</div><div class="line">    <span class="class"><span class="keyword">class</span> <span class="title">Return</span> &#123;</span>\</div><div class="line">        <span class="keyword">public</span>:\</div><div class="line">        <span class="keyword">template</span>&lt;<span class="keyword">typename</span> TF, <span class="keyword">typename</span> TCONTEXT, <span class="keyword">typename</span>... TRSPS&gt; \</div><div class="line">        <span class="class"><span class="keyword">class</span> <span class="title">Callback</span> :</span> <span class="keyword">public</span> TF &#123;\</div><div class="line">        <span class="keyword">public</span>:                                                         \</div><div class="line">            Callback(<span class="built_in">std</span>::<span class="built_in">shared_ptr</span>&lt;<span class="keyword">typename</span> ForwardHelper::Forward&lt;TREQS...&gt;::<span class="keyword">template</span> Return&lt;TR&gt;::<span class="keyword">template</span> CallbackProcesserBase&lt;TCONTEXT, TRSPS...&gt;&gt; processer, <span class="keyword">const</span> TCONTEXT&amp; context, <span class="keyword">const</span> TREQS&amp;... tReqs) \</div><div class="line">            : m_processer(processer), m_context(context) &#123;                     \</div><div class="line">                m_processer-&gt;onRequest(m_context, <span class="built_in">std</span>::<span class="built_in">string</span>(#requestName), tReqs...); \</div><div class="line">            &#125;                                                           \</div><div class="line">            <span class="keyword">virtual</span> <span class="keyword">void</span> callback_##requestName(TR ret, TRSPS... rsps) &#123; \</div><div class="line">                m_processer-&gt;onCallback(m_context, <span class="built_in">std</span>::<span class="built_in">string</span>(#requestName), ret, rsps...); \</div><div class="line">            &#125;                                                           \</div><div class="line">            <span class="keyword">virtual</span> <span class="keyword">void</span> callback_##requestName##_exception(TR ret) &#123;\</div><div class="line">                m_processer-&gt;onCallbackException(m_context, <span class="built_in">std</span>::<span class="built_in">string</span>(#requestName), ret); \</div><div class="line">            &#125;\</div><div class="line">        <span class="keyword">private</span>:\</div><div class="line">            <span class="built_in">std</span>::<span class="built_in">shared_ptr</span>&lt;<span class="keyword">typename</span> ForwardHelper::Forward&lt;TREQS...&gt;::<span class="keyword">template</span> Return&lt;TR&gt;::<span class="keyword">template</span> CallbackProcesserBase&lt;TCONTEXT, TRSPS...&gt;&gt; m_processer; \</div><div class="line">            TCONTEXT m_context;                                         \</div><div class="line">        &#125;;\</div><div class="line">    <span class="keyword">private</span>:\</div><div class="line">        Return()&#123;&#125;\</div><div class="line">        Return(<span class="keyword">const</span> Return&amp;)&#123;&#125;\</div><div class="line">    &#125;;\</div><div class="line"><span class="keyword">private</span>:\</div><div class="line">    Forward()&#123;&#125;                                    \</div><div class="line">    Forward(<span class="keyword">const</span> ForwardFor_##requestName&amp;)&#123;&#125;                  \</div><div class="line">&#125;;                                                              \</div><div class="line">&#125;</div><div class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></div></pre></td></tr></table></figure>
+<p>使用嵌套类是为了区分请求参数类型列表和回包(出参)参数类型列表<br>Forward类的模板参数是请求参数列表<br>Callback类的模板参数是回包参数列表<br>TCONTEXT是callback允许外带的一个上下文,方便发包和收包的逻辑衔接<br>TF是这个宏生成出来的类的基类,本例中就是上面出现的FakeCallbackBase<br>m_processer是用来统一处理所有回包的一个处理器,我们把<em>静态的代码转换为动态的代码</em>,靠的就是这个m_processer</p>
+<p>下面来看一下Processer的代码</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">namespace</span> ForwardHelper &#123;</div><div class="line">    <span class="keyword">template</span>&lt;<span class="keyword">typename</span>... TREQS&gt;</div><div class="line">    <span class="class"><span class="keyword">class</span> <span class="title">Forward</span> &#123;</span></div><div class="line">    <span class="keyword">public</span>:</div><div class="line">        <span class="keyword">template</span>&lt;<span class="keyword">typename</span> TR&gt;</div><div class="line">        <span class="class"><span class="keyword">class</span> <span class="title">Return</span> &#123;</span></div><div class="line">        <span class="keyword">public</span>:</div><div class="line">            <span class="keyword">template</span>&lt;<span class="keyword">typename</span> TCONTEXT, <span class="keyword">typename</span>... TRSPS&gt;</div><div class="line">            <span class="class"><span class="keyword">class</span> <span class="title">CallbackProcesserBase</span> &#123;</span></div><div class="line">            <span class="keyword">public</span>:</div><div class="line">                <span class="function"><span class="keyword">virtual</span> <span class="keyword">void</span> <span class="title">onRequest</span><span class="params">(TCONTEXT&amp; m_context, <span class="keyword">const</span> <span class="built_in">std</span>::<span class="built_in">string</span>&amp; requestName, <span class="keyword">const</span> TREQS&amp;... tReqs)</span> </span>= <span class="number">0</span>;</div><div class="line">                <span class="function"><span class="keyword">virtual</span> <span class="keyword">void</span> <span class="title">onCallbackException</span><span class="params">(TCONTEXT&amp; m_context, <span class="keyword">const</span> <span class="built_in">std</span>::<span class="built_in">string</span>&amp; requestName, TR t)</span> </span>= <span class="number">0</span>;</div><div class="line">                <span class="function"><span class="keyword">virtual</span> <span class="keyword">void</span> <span class="title">onCallback</span><span class="params">(TCONTEXT&amp; m_context, <span class="keyword">const</span> <span class="built_in">std</span>::<span class="built_in">string</span>&amp; requestName, TR t, TRSPS... rsps)</span> </span>= <span class="number">0</span>;</div><div class="line">            &#125;;</div><div class="line">        &#125;;</div><div class="line">    &#125;;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>CallbackProcesserBase 就是Processer的基类,因为我们要实现的是HTTP的转发,所以使用一个派生类来实现以上的接口定义,代码如下:</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div><div class="line">39</div><div class="line">40</div><div class="line">41</div><div class="line">42</div><div class="line">43</div><div class="line">44</div><div class="line">45</div><div class="line">46</div><div class="line">47</div><div class="line">48</div><div class="line">49</div><div class="line">50</div><div class="line">51</div><div class="line">52</div><div class="line">53</div><div class="line">54</div><div class="line">55</div><div class="line">56</div><div class="line">57</div><div class="line">58</div><div class="line">59</div><div class="line">60</div><div class="line">61</div><div class="line">62</div><div class="line">63</div><div class="line">64</div><div class="line">65</div><div class="line">66</div><div class="line">67</div><div class="line">68</div><div class="line">69</div><div class="line">70</div><div class="line">71</div><div class="line">72</div><div class="line">73</div><div class="line">74</div><div class="line">75</div><div class="line">76</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span>... TREQS&gt;</div><div class="line"><span class="class"><span class="keyword">class</span> <span class="title">HTTPForward</span> &#123;</span></div><div class="line"><span class="keyword">public</span>:</div><div class="line">    <span class="keyword">template</span>&lt;<span class="keyword">typename</span> TR&gt;</div><div class="line">    <span class="class"><span class="keyword">class</span> <span class="title">Return</span> &#123;</span></div><div class="line">    <span class="keyword">public</span>:</div><div class="line">        <span class="keyword">template</span>&lt;<span class="keyword">typename</span>... TRSPS&gt;</div><div class="line">        <span class="class"><span class="keyword">class</span> <span class="title">MultiReqRspGenericHttpProcesser</span> :</span> <span class="keyword">public</span> ForwardHelper::Forward&lt;TREQS...&gt;::<span class="keyword">template</span> Return&lt;TR&gt;::<span class="keyword">template</span> CallbackProcesserBase&lt;tars::TarsCurrentPtr, TRSPS...&gt; &#123;</div><div class="line">        <span class="keyword">public</span>:</div><div class="line">            <span class="function"><span class="keyword">virtual</span> <span class="keyword">void</span> <span class="title">onRequest</span><span class="params">(tars::TarsCurrentPtr &amp;current, <span class="keyword">const</span> <span class="built_in">std</span>::<span class="built_in">string</span>&amp; requestName, <span class="keyword">const</span> TREQS&amp;... tReqs)</span> </span>&#123;</div><div class="line">                m_startTime = TNOWMS;</div><div class="line">                getStringStreamByMultiParam(m_ossReq, tReqs...);</div><div class="line">                FDLOG(<span class="string">"protocol"</span>) &lt;&lt; requestName &lt;&lt; <span class="string">"|REQ|"</span> &lt;&lt; m_ossReq.str() &lt;&lt; <span class="built_in">endl</span>;</div><div class="line">            &#125;</div><div class="line">            <span class="function"><span class="keyword">virtual</span> <span class="keyword">void</span> <span class="title">onCallbackException</span><span class="params">(tars::TarsCurrentPtr &amp;current, <span class="keyword">const</span> <span class="built_in">std</span>::<span class="built_in">string</span>&amp; requestName, TR ret)</span> </span>&#123;</div><div class="line">                ERRORLOG &lt;&lt; requestName &lt;&lt; <span class="string">"|REQ|"</span> &lt;&lt; m_ossReq.str() &lt;&lt; <span class="string">"|"</span> &lt;&lt; ret &lt;&lt; <span class="string">"|"</span> &lt;&lt; getCostInMS() &lt;&lt; <span class="built_in">endl</span>;</div><div class="line">            &#125;</div><div class="line"></div><div class="line">            <span class="function"><span class="keyword">void</span> <span class="title">processCallback</span><span class="params">(<span class="built_in">std</span>::<span class="built_in">vector</span>&lt;<span class="built_in">std</span>::<span class="built_in">string</span>&gt; &amp;bodies, <span class="built_in">std</span>::<span class="built_in">ostringstream</span> &amp;oss)</span> </span>&#123;</div><div class="line">            &#125;</div><div class="line"></div><div class="line">            <span class="keyword">template</span>&lt;<span class="keyword">typename</span> T&gt;</div><div class="line">            <span class="function"><span class="keyword">void</span> <span class="title">processCallback</span><span class="params">(<span class="built_in">std</span>::<span class="built_in">vector</span>&lt;<span class="built_in">std</span>::<span class="built_in">string</span>&gt; &amp;bodies, <span class="built_in">std</span>::<span class="built_in">ostringstream</span> &amp;oss, T lastOneOfRSPS)</span> </span>&#123;</div><div class="line">                bodies.emplace_back();</div><div class="line">                tarsEncode(lastOneOfRSPS, *bodies.rbegin());</div><div class="line">                oss &lt;&lt; lastOneOfRSPS;</div><div class="line">            &#125;</div><div class="line"></div><div class="line">            <span class="keyword">template</span>&lt;<span class="keyword">typename</span> T, <span class="keyword">typename</span>... TRSPS2&gt;</div><div class="line">            <span class="function"><span class="keyword">void</span> <span class="title">processCallback</span><span class="params">(<span class="built_in">std</span>::<span class="built_in">vector</span>&lt;<span class="built_in">std</span>::<span class="built_in">string</span>&gt; &amp;bodies, <span class="built_in">std</span>::<span class="built_in">ostringstream</span> &amp;oss, T oneOfRSPS,  TRSPS2... rsps)</span> </span>&#123;</div><div class="line">                bodies.emplace_back();</div><div class="line">                tarsEncode(oneOfRSPS, *bodies.rbegin());</div><div class="line">                oss &lt;&lt; oneOfRSPS &lt;&lt; <span class="string">"|"</span>;</div><div class="line">                processCallback(bodies, oss, rsps...);</div><div class="line">            &#125;</div><div class="line"></div><div class="line">            <span class="function"><span class="keyword">virtual</span> <span class="keyword">void</span> <span class="title">onCallback</span><span class="params">(tars::TarsCurrentPtr &amp;current, <span class="keyword">const</span> <span class="built_in">std</span>::<span class="built_in">string</span>&amp; requestName, TR ret, TRSPS... rsps)</span> </span>&#123;</div><div class="line">                <span class="comment">//打包rsps, 然后使用current对proxy的调用方回包,从而实现统一的转发</span></div><div class="line">                <span class="built_in">std</span>::<span class="built_in">ostringstream</span> ossRsp;  <span class="comment">//日志使用</span></div><div class="line">                ResponseModern rsp;</div><div class="line">                processCallback(rsp.outParams, ossRsp, rsps...); <span class="comment">//这一行对rsps进行拆包,然后一个一个Encode到一个std::vector&lt;std::string&gt;(也就是rsp.outParams)中</span></div><div class="line">                rsp.result.retCode = ret;</div><div class="line">                <span class="built_in">string</span> body;</div><div class="line">                tarsEncode(rsp,body); <span class="comment">//最后把最外层的rsp Encode,然后直接http返回</span></div><div class="line">                TC_HttpResponse httpResp;</div><div class="line">                httpResp.setContentType(<span class="string">"application/octet-stream;charset=UTF-8"</span>);</div><div class="line">                httpResp.setCacheControl(<span class="string">"no-cache"</span>);</div><div class="line">                httpResp.setResponse(<span class="number">200</span>, <span class="string">"OK"</span>, body);</div><div class="line">                body = httpResp.encode();</div><div class="line">                <span class="keyword">if</span>( !current-&gt;isResponse())</div><div class="line">                &#123;</div><div class="line">                    current-&gt;sendResponse(body.data(),body.size());</div><div class="line">                    FDLOG(<span class="string">"protocol"</span>)&lt;&lt; requestName&lt;&lt; <span class="string">"|REQ|"</span> &lt;&lt; m_ossReq.str() &lt;&lt;</div><div class="line">                        <span class="string">"|RSP|"</span> &lt;&lt; ossRsp.str() &lt;&lt; <span class="string">"|"</span>&lt;&lt; ret &lt;&lt;<span class="string">"|"</span>&lt;&lt; getCostInMS() &lt;&lt; <span class="string">"|"</span> &lt;&lt; body.size() &lt;&lt; <span class="built_in">endl</span>;</div><div class="line">                &#125;</div><div class="line">            &#125;</div><div class="line"></div><div class="line">            <span class="keyword">template</span>&lt;<span class="keyword">typename</span> TFORWARDFOR, <span class="keyword">typename</span> TF, <span class="keyword">typename</span> TCONTEXT&gt;</div><div class="line">            <span class="function"><span class="keyword">static</span> TF* <span class="title">makeCallback</span><span class="params">(<span class="keyword">const</span> TCONTEXT&amp; context, <span class="keyword">const</span> TREQS&amp;... treqs)</span> </span>&#123;</div><div class="line">                <span class="comment">//为了避免多次填写模板参数,方便生成callback对象,所以使用了一个独立的静态工厂函数,实现模板参数的推导</span></div><div class="line">                <span class="keyword">auto</span> pThis = <span class="built_in">std</span>::make_shared&lt;<span class="keyword">typename</span> HTTPForward&lt;TREQS...&gt;::<span class="keyword">template</span> Return&lt;TR&gt;::<span class="keyword">template</span> MultiReqRspGenericHttpProcesser&lt;TRSPS...&gt;&gt;();</div><div class="line">                TF* base = <span class="keyword">new</span> <span class="keyword">typename</span> TFORWARDFOR::<span class="keyword">template</span> Forward&lt;TREQS...&gt;::<span class="keyword">template</span> Return&lt;TR&gt;::<span class="keyword">template</span> Callback&lt;TF, TCONTEXT, TRSPS...&gt;(</div><div class="line">                    <span class="built_in">std</span>::dynamic_pointer_cast&lt;<span class="keyword">typename</span> ForwardHelper::Forward&lt;TREQS...&gt;::<span class="keyword">template</span> Return&lt;TR&gt;::<span class="keyword">template</span> CallbackProcesserBase&lt;TCONTEXT, TRSPS...&gt;&gt;(pThis),</div><div class="line">                    context,</div><div class="line">                    treqs...);</div><div class="line">                <span class="keyword">return</span> base;</div><div class="line">            &#125;</div><div class="line">    <span class="keyword">protected</span>:</div><div class="line">            <span class="keyword">int64_t</span> m_startTime;</div><div class="line">            <span class="built_in">std</span>::<span class="built_in">ostringstream</span> m_ossReq;</div><div class="line">            <span class="keyword">int64_t</span> getCostInMS() <span class="keyword">const</span> &#123;</div><div class="line">                <span class="keyword">return</span> TNOWMS - m_startTime;</div><div class="line">            &#125;</div><div class="line">        &#125;;</div><div class="line">    &#125;;</div><div class="line">&#125;;</div></pre></td></tr></table></figure>
+<p>最后,通过变参模板,我实现了一个接口只需要两行代码即可进行转发,一行代码是使用DEFINE_FORWARD_CALLBACK 宏生成一个callback的基类, 一行代码是用来表示这个接口的返回值,入参和出参,代码长相如下:</p>
+<p>CASE宏定义,简化最终代码<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div></pre></td><td class="code"><pre><div class="line"><span class="meta">#<span class="meta-keyword">ifndef</span> CASE</span></div><div class="line"><span class="meta">#<span class="meta-keyword">define</span> CASE(exp)                               \</span></div><div class="line">    &#123;                                           \</div><div class="line">        <span class="keyword">if</span> (<span class="built_in">exp</span>) &#123;                              \</div><div class="line">            <span class="keyword">return</span> ret;                         \</div><div class="line">        &#125;                                       \</div><div class="line">    &#125;</div><div class="line"><span class="meta">#<span class="meta-keyword">endif</span></span></div></pre></td></tr></table></figure></p>
+<p>定义一个接口的转发代码<br><figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line">CASE((Dispatcher&lt;FakeServerPrx::Callback, GET_FORWARDER(fakeRequestName), tars::TarsCurrentPtr&gt;</div><div class="line">::REQ&lt;<span class="keyword">int64_t</span>, <span class="built_in">std</span>::<span class="built_in">string</span>&gt;   <span class="comment">//入参列表,支持0-N个任意类型的参数</span></div><div class="line">::RSP&lt;<span class="keyword">const</span> FakeResponse2&amp;, <span class="keyword">const</span> FakeResponse&amp;&gt;  <span class="comment">//出参列表,0-N个任意类型的回包</span></div><div class="line">::tryDispatch(current, iterPrx-&gt;second, req.header.funcName, GETSTR(getProfile), req.params)));</div></pre></td></tr></table></figure></p>
+<p>Dispatcher 的主要逻辑是把一个std::vector<std::string>的请求参数列表解包成其对应类型的Tars结构体,然后日志记录并且向下进行转发,也使用了变参模板的特性.这里就不赘述了.</std::string></p>
+<p>后面,我们可以根据.tars文件定义的RPC接口,来动态生成转发代码,从而实现Proxy服务全自动生成.对外暴露接口再也没有任何工作量了!</p>
+<h1 id="Notes"><a href="#Notes" class="headerlink" title="Notes"></a>Notes</h1><ul>
+<li>我觉得写代码的一大乐趣,就是把复杂的问题简单化,复杂的事情只做一次.尽可能的减少对外暴露的复杂度,就本例来说,基本上算是做到了.</li>
+<li>以上代码使用了变参模板的递归,和tuple递归,这里的思想其实是和erlang这种函数式语言的for循环一样,使用这种看似很奇怪的写法,是因为模板里面<em>没有变量,只有常量</em>.</li>
+<li>Dispatcher中使用了把变参模板暂存为一个tuple,然后再unpacking, 需要使用另一个函数来中转, 这种写法还是很奇怪,很hacking, 不过似乎也没有其他的写法了.参考<a href="https://www.murrayc.com/permalink/2015/12/05/modern-c-variadic-template-parameters-and-tuples/" target="_blank" rel="external">这里</a>.</li>
+<li>核心思想是:<ol>
+<li>把各种类型的Callback通过宏自动生成</li>
+<li>找一个地方汇总所有的Callback的结果然后统一处理</li>
+</ol>
+</li>
+</ul>
+
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+	<div class="article-tag tagcloud">
+		<i class="icon-price-tags icon"></i>
+		<ul class="article-tag-list">
+			 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">cpp</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color5">tars</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">proxy</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">template</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">variadic template</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">c++14</a>
+        		</li>
+      		
+		</ul>
+	</div>
+
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2017/11/02/通过使用C++变参模板动态生成重载函数来解决Tars框架的消息转发问题/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
     <article id="post-使用tcpdump抓包并通过wireshark图形化工具来分析网络问题" class="article article-type-post  article-index" itemscope itemprop="blogPost">
   <div class="article-inner">
     
@@ -946,10 +1067,6 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color3">apt-get</a>
-              </li>
-             
-              <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color1">emacs</a>
               </li>
              
@@ -959,6 +1076,10 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color4">ide</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color4">vim</a>
               </li>
              
               <li class="article-tag-list-item">
@@ -986,7 +1107,31 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color4">vim</a>
+                <a href="javascript:void(0)" class="js-tag color3">apt-get</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color4">cpp</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color5">tars</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color1">proxy</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color4">template</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color3">variadic template</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color1">c++14</a>
               </li>
             
             <div class="clearfix"></div>
