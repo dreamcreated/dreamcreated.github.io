@@ -155,6 +155,124 @@
           <div id="js-content" class="content-ll">
             
   
+    <article id="post-使用nginx-lua实现对阿里云OSS文件的实时解密" class="article article-type-post  article-index" itemscope itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2017/11/07/使用nginx-lua实现对阿里云OSS文件的实时解密/">使用nginx+lua实现对阿里云OSS文件的实时解密</a>
+    </h1>
+  
+
+        
+        <a href="/2017/11/07/使用nginx-lua实现对阿里云OSS文件的实时解密/" class="archive-article-date">
+  	<time datetime="2017-11-07T08:03:47.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2017-11-07</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <p>临时接到一个需求,有一个巨大的资源池,传到阿里云的OSS上了,坑爹的是资源池内的文件全是加密的.临上线了才发现这个坑.为了安全也不能把未加密的文件对外传输.所以就得想办法实时解密.</p>
+<p>首先想到的就是通过一个反向代理来转发,代理收到内容后,解密然后再回包.</p>
+<p>所以首选Nginx了, 虽然我们一直用Nginx作为网关,但是我对其还处于完全不了解的状态,趁机恶补一下知识, 花了2个小时看了淘宝团队写的<a href="http://tengine.taobao.org/book/" target="_blank" rel="external">Nginx开发从入门到精通</a>,最后发现,添加一个module竟然要重新编译nginx?? What the fuck!这不科学…</p>
+<p>于是寻寻觅觅,发现了lua-nginx-module,进而发现了已经打包好的openresty.</p>
+<p>之前接触过云风大神写的<a href="https://github.com/cloudwu/skynet" target="_blank" rel="external">skynet</a>游戏服务端框架,也是使用lua作为开发语言,使用lua的协程特性可以很方便的把异步代码”逻辑同步化”,不过我这次需要实现的解密功能,是属于典型的CPU密集型的应用,和同步异步没啥关系…<br>如果用脚本语言实现加解密算法,性能可想而知,不过还好,发现了一个叫lua-resty-nettle的加解密库,加解密算法都是native实现的,lua只是作为胶水.所以性能基本上放心了.<br>再加上找京东的同事考证了一下,他们内部确实也使用了这个东西,所以稳定性应该是没有问题.</p>
+<p>技术方案定了,接下来就是写代码了.</p>
+<p>看了一下<a href="https://github.com/openresty/lua-nginx-module" target="_blank" rel="external">官方文档</a>,lua-nginx-module提供了很多钩子,可以让你通过lua代码去处理,找出我现在最需要的几个钩子:</p>
+<ul>
+<li>body_filter_by_lua<br>把反向代理获取到的body传入自己编写的lua代码中进行处理,需要注意的是这里传入的是一个一个”chunk”,载入一个页面,可能会分为好几次调用过来,所以我们编写的lua代码需要处理这种情况</li>
+<li>rewrite_by_lua_block<br>可以使用lua代码对url进行重写,需要用这个的原因是因为资源池以前是在windows上,之前大小写不敏感,导致很多地方的url引用不区分大小写也可以正常使用, 所以现在迁移到OSS后,大小写敏感了.为了兼容这种情况,只能把所有的文件名全部转换为小写,然后把所有转发请求的url都rewrite为小写</li>
+<li>header_filter_by_lua_block<br>可以使用lua代码重写http头.因为回包经过解密后length变了,所以需要把content_length设为空,这样浏览器就可以识别body是chunk的方式传输的,还需要把content_encoding设为nil,否则oss会根据大部分浏览器的请求,返回一个gzip压缩过的数据,为了处理方便,这里就强行把gzip给关了当然,通过这个钩子只能处理被代理方回包的http头,具体如何强行关闭gzip,后面再说.</li>
+</ul>
+<p>具体配置如下:</p>
+<figure class="highlight nginx"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div></pre></td><td class="code"><pre><div class="line"></div><div class="line"><span class="attribute">worker_processes</span>  <span class="number">1</span>;</div><div class="line"></div><div class="line"><span class="attribute">error_log</span>  logs/error.log  <span class="literal">info</span>;</div><div class="line"></div><div class="line"></div><div class="line"><span class="section">events</span> &#123;</div><div class="line">    <span class="attribute">worker_connections</span>  <span class="number">1024</span>;</div><div class="line">&#125;</div><div class="line"></div><div class="line"></div><div class="line"><span class="section">http</span> &#123;</div><div class="line">    <span class="attribute">include</span>       mime.types;</div><div class="line">    <span class="attribute">default_type</span>  application/octet-stream;</div><div class="line"></div><div class="line"></div><div class="line">    <span class="attribute">sendfile</span>        <span class="literal">on</span>;</div><div class="line"></div><div class="line">    <span class="attribute">keepalive_timeout</span>  <span class="number">65</span>;</div><div class="line"></div><div class="line">    <span class="section">server</span> &#123;</div><div class="line">        <span class="attribute">listen</span>       <span class="number">80</span>;</div><div class="line">        <span class="attribute">server_name</span>  localhost;</div><div class="line"></div><div class="line">        <span class="attribute">location</span> / &#123;</div><div class="line">                 <span class="attribute">proxy_pass</span>     http://资源池的地址;</div><div class="line">                 <span class="attribute">proxy_set_header</span> Accept-Encoding <span class="string">""</span>;</div><div class="line">                 <span class="section">rewrite_by_lua_block</span> &#123;</div><div class="line">                      ngx.req.set_uri(string.lower(ngx.var.uri))</div><div class="line">                 &#125;</div><div class="line">                 <span class="section">header_filter_by_lua_block</span> &#123;</div><div class="line">                      ngx.header.content_length = nil</div><div class="line">                      ngx.header.content_encoding = nil</div><div class="line">                 &#125;</div><div class="line">                 <span class="attribute">body_filter_by_lua_file</span> /path/to/lua/resource_decrypt.lua;</div><div class="line">        &#125;</div><div class="line">    &#125;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>注意这一行:</p>
+<figure class="highlight nginx"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line"><span class="attribute">proxy_set_header</span> Accept-Encoding <span class="string">""</span>;</div></pre></td></tr></table></figure>
+<p>使用 proxy_set_header 功能,强行屏蔽掉浏览器gzip压缩格式的请求.所以到被代理方,也就是资源池的请求,永远是不压缩的.</p>
+<p>因为lua代码比较长,所以为了方便把它放到一个文件里面了, 然后通过body_filter_by_lua_file 指定文件,效果和body_filter_by_lua是一样的</p>
+<p>lua代码如下:</p>
+<figure class="highlight lua"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div><div class="line">39</div><div class="line">40</div><div class="line">41</div><div class="line">42</div><div class="line">43</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">local</span> data, eof = ngx.<span class="built_in">arg</span>[<span class="number">1</span>], ngx.<span class="built_in">arg</span>[<span class="number">2</span>]</div><div class="line"><span class="keyword">local</span> des = <span class="built_in">require</span> <span class="string">"resty.nettle.des"</span></div><div class="line"><span class="keyword">local</span> buffered = ngx.ctx.buffered</div><div class="line"><span class="keyword">local</span> bufferedSize = ngx.ctx.bufferedSize</div><div class="line"><span class="keyword">local</span> packageSize = <span class="number">2048000</span> <span class="comment">-- 2m</span></div><div class="line"></div><div class="line"><span class="keyword">if</span> <span class="keyword">not</span> bufferedSize <span class="keyword">then</span></div><div class="line">   bufferedSize = <span class="number">0</span></div><div class="line">   ngx.ctx.bufferedSize = bufferedSize</div><div class="line"><span class="keyword">end</span></div><div class="line"></div><div class="line"><span class="keyword">if</span> ngx.ctx.bufferedSize &lt;= packageSize <span class="keyword">then</span></div><div class="line">   <span class="keyword">if</span> <span class="keyword">not</span> buffered <span class="keyword">then</span></div><div class="line">      buffered = &#123;&#125;</div><div class="line">      ngx.ctx.buffered = buffered</div><div class="line">   <span class="keyword">end</span></div><div class="line">   <span class="keyword">if</span> data ~= <span class="string">""</span> <span class="keyword">then</span></div><div class="line">      buffered[#buffered+<span class="number">1</span>] = data</div><div class="line">      bufferedSize = bufferedSize + #data</div><div class="line">      <span class="keyword">if</span> bufferedSize &gt; packageSize <span class="keyword">then</span></div><div class="line">         ngx.<span class="built_in">arg</span>[<span class="number">1</span>] = <span class="built_in">table</span>.<span class="built_in">concat</span>(buffered)</div><div class="line">         ngx.ctx.buffered = <span class="literal">nil</span></div><div class="line">         <span class="keyword">if</span> eof <span class="keyword">then</span></div><div class="line">            ngx.ctx.bufferedSize = <span class="literal">nil</span></div><div class="line">         <span class="keyword">end</span></div><div class="line">         <span class="keyword">return</span></div><div class="line">      <span class="keyword">else</span></div><div class="line">         ngx.<span class="built_in">arg</span>[<span class="number">1</span>] = <span class="literal">nil</span></div><div class="line">      <span class="keyword">end</span></div><div class="line">   <span class="keyword">end</span></div><div class="line"><span class="keyword">else</span></div><div class="line">   ngx.<span class="built_in">arg</span>[<span class="number">1</span>] = data</div><div class="line"><span class="keyword">end</span></div><div class="line"></div><div class="line"><span class="keyword">if</span> eof <span class="keyword">then</span></div><div class="line">   <span class="keyword">local</span> whole = <span class="built_in">table</span>.<span class="built_in">concat</span>(buffered)</div><div class="line">   ngx.ctx.buffered = <span class="literal">nil</span></div><div class="line">   ngx.ctx.bufferedSize = <span class="literal">nil</span></div><div class="line">   <span class="keyword">local</span> ds, wk = des.new(<span class="string">"password"</span>, <span class="string">"cbc"</span>, <span class="string">"iv"</span>)</div><div class="line">   <span class="keyword">local</span> raw = ds:decrypt(whole)</div><div class="line">   ngx.<span class="built_in">arg</span>[<span class="number">1</span>] = <span class="built_in">string</span>.<span class="built_in">sub</span>(raw, <span class="number">1</span>, #raw - <span class="built_in">string</span>.<span class="built_in">byte</span>(raw, #raw))  <span class="comment">-- 需要取最后一个字符作为长度,在解密的字符串中删除掉这个长度的字符数</span></div><div class="line">   ngx.<span class="built_in">arg</span>[<span class="number">2</span>] = <span class="literal">true</span></div><div class="line"><span class="keyword">end</span></div></pre></td></tr></table></figure>
+<p>ngx.arg[1]表示当前数据 ngx.arg[2]表示当前数据是否是最后一个chunk.<br>对ngx.arg[1]赋值表示要传给最终用户(浏览器)的数据,所以处理完数据后别忘了赋值给ngx.arg[1]<br>因为数据不是一次性发过来的,所以需要进行拼包,如果发现某个文件过大,就不解密直接raw过去<br>lua代码中用到了ngx.ctx.*, 这个是lua-nginx-module提供的一个global的table,可以用来暂存任意数据.当一个完整的文件没有传送完成时,之前传送的部分就存在这里.</p>
+<p>为了解密des,用到了一个第三方lua库,openresty提供了包管理器,可以使用以下命令安装:</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">sudo opm get bungle/lua-resty-nettle</div></pre></td></tr></table></figure>
+<p>还有一个需要注意的是,des解密后出来的文件总是对不上,后面会莫名其妙多出几个byte,查阅资料后发现,原来PKCS5Padding会填充长度为8的倍数,处理这个问题也很简单,把最后一个byte拿出来作为冗余数据的长度,从解密数据中删除尾部的这个长度的数据即可.</p>
+<p>花了一天从确定技术方案到开发完成,保证了项目上线时间.还是蛮有成就感的.</p>
+
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+	<div class="article-tag tagcloud">
+		<i class="icon-price-tags icon"></i>
+		<ul class="article-tag-list">
+			 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">nginx</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">lua</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color5">openresty</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">des</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">阿里云</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">oss</a>
+        		</li>
+      		
+		</ul>
+	</div>
+
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2017/11/07/使用nginx-lua实现对阿里云OSS文件的实时解密/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
     <article id="post-通过使用C++变参模板动态生成重载函数来解决Tars框架的消息转发问题" class="article article-type-post  article-index" itemscope itemprop="blogPost">
   <div class="article-inner">
     
@@ -522,11 +640,11 @@
         		</li>
       		 
         		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">linux</a>
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">apt-get</a>
         		</li>
       		 
         		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">apt-get</a>
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">linux</a>
         		</li>
       		
 		</ul>
@@ -714,11 +832,11 @@
         		</li>
       		 
         		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">字体</a>
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">linux</a>
         		</li>
       		 
         		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">linux</a>
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">字体</a>
         		</li>
       		 
         		<li class="article-tag-list-item">
@@ -1067,6 +1185,14 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color3">apt-get</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color1">linux</a>
+              </li>
+             
+              <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color1">emacs</a>
               </li>
              
@@ -1079,19 +1205,27 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color3">字体</a>
+                <a href="javascript:void(0)" class="js-tag color1">nginx</a>
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color1">linux</a>
+                <a href="javascript:void(0)" class="js-tag color4">lua</a>
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color4">fc-cache</a>
+                <a href="javascript:void(0)" class="js-tag color5">openresty</a>
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color4">vim</a>
+                <a href="javascript:void(0)" class="js-tag color4">des</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color4">阿里云</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color4">oss</a>
               </li>
              
               <li class="article-tag-list-item">
@@ -1107,7 +1241,7 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color3">apt-get</a>
+                <a href="javascript:void(0)" class="js-tag color4">vim</a>
               </li>
              
               <li class="article-tag-list-item">
@@ -1132,6 +1266,14 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color1">cpp14</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color3">字体</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color4">fc-cache</a>
               </li>
             
             <div class="clearfix"></div>
