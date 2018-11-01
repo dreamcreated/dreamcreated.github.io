@@ -166,13 +166,13 @@
     </summary>
     
     
-      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
-    
       <category term="mysql" scheme="http://lida.site/tags/mysql/"/>
     
       <category term="crash" scheme="http://lida.site/tags/crash/"/>
     
       <category term="libmysqlclient" scheme="http://lida.site/tags/libmysqlclient/"/>
+    
+      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
     
       <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
     
@@ -224,13 +224,13 @@
     </summary>
     
     
-      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
-    
       <category term="mysql" scheme="http://lida.site/tags/mysql/"/>
     
       <category term="crash" scheme="http://lida.site/tags/crash/"/>
     
       <category term="libmysqlclient" scheme="http://lida.site/tags/libmysqlclient/"/>
+    
+      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
     
       <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
     
@@ -259,9 +259,9 @@
     
       <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
     
-      <category term="linux" scheme="http://lida.site/tags/linux/"/>
-    
       <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
+    
+      <category term="linux" scheme="http://lida.site/tags/linux/"/>
     
       <category term="字体" scheme="http://lida.site/tags/%E5%AD%97%E4%BD%93/"/>
     
@@ -325,11 +325,11 @@
     
       <category term="emacs" scheme="http://lida.site/tags/emacs/"/>
     
-      <category term="vim" scheme="http://lida.site/tags/vim/"/>
-    
       <category term="编辑器" scheme="http://lida.site/tags/%E7%BC%96%E8%BE%91%E5%99%A8/"/>
     
       <category term="ide" scheme="http://lida.site/tags/ide/"/>
+    
+      <category term="vim" scheme="http://lida.site/tags/vim/"/>
     
   </entry>
   
