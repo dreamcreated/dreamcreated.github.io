@@ -16,7 +16,7 @@
 <meta property="og:site_name" content="Dream Creator&#39;s blog">
 <meta property="og:description" content="临时接到一个需求,有一个巨大的资源池,传到阿里云的OSS上了,坑爹的是资源池内的文件全是加密的.临上线了才发现这个坑.为了安全也不能把未加密的文件对外传输.所以就得想办法实时解密. 首先想到的就是通过一个反向代理来转发,代理收到内容后,解密然后再回包. 所以首选Nginx了, 虽然我们一直用Nginx作为网关,但是我对其还处于完全不了解的状态,趁机恶补一下知识, 花了2个小时看了淘宝团队写的Ngi">
 <meta property="og:locale" content="zh-CN">
-<meta property="og:updated_time" content="2017-11-07T09:04:23.426Z">
+<meta property="og:updated_time" content="2017-11-07T09:04:23.427Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="使用nginx+lua实现对阿里云OSS文件的实时解密">
 <meta name="twitter:description" content="临时接到一个需求,有一个巨大的资源池,传到阿里云的OSS上了,坑爹的是资源池内的文件全是加密的.临上线了才发现这个坑.为了安全也不能把未加密的文件对外传输.所以就得想办法实时解密. 首先想到的就是通过一个反向代理来转发,代理收到内容后,解密然后再回包. 所以首选Nginx了, 虽然我们一直用Nginx作为网关,但是我对其还处于完全不了解的状态,趁机恶补一下知识, 花了2个小时看了淘宝团队写的Ngi">
@@ -329,6 +329,15 @@
   
 <nav id="article-nav">
   
+    <a href="/2018/11/01/初次使用golang和mongodb开发一个完整产品的一些笔记/" id="article-nav-newer" class="article-nav-link-wrap">
+      <i class="icon-circle-left"></i>
+      <div class="article-nav-title">
+        
+          初次使用golang和mongodb开发一个完整产品的一些笔记
+        
+      </div>
+    </a>
+  
   
     <a href="/2017/11/02/通过使用C++变参模板动态生成重载函数来解决Tars框架的消息转发问题/" id="article-nav-older" class="article-nav-link-wrap">
       <div class="article-nav-title">通过使用C++变参模板动态生成重载函数来解决Tars框架的消息转发问题</div>
@@ -388,7 +397,7 @@
   <div class="outer">
     <div id="footer-info">
     	<div class="footer-left">
-    		&copy; 2017 David Lee
+    		&copy; 2018 David Lee
     	</div>
       	<div class="footer-right">
       		<a href="http://hexo.io/" target="_blank">Hexo</a>  Theme <a href="https://github.com/litten/hexo-theme-yilia" target="_blank">Yilia</a> by Litten
@@ -471,6 +480,18 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
           <ul class="article-tag-list" q-show="showTags">
              
               <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color2">ubuntu</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color3">apt-get</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color1">linux</a>
+              </li>
+             
+              <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color1">mysql</a>
               </li>
              
@@ -483,23 +504,23 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color2">ubuntu</a>
-              </li>
-             
-              <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color3">随笔</a>
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color3">apt-get</a>
+                <a href="javascript:void(0)" class="js-tag color3">字体</a>
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color1">linux</a>
+                <a href="javascript:void(0)" class="js-tag color4">fc-cache</a>
               </li>
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color1">emacs</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color4">vim</a>
               </li>
              
               <li class="article-tag-list-item">
@@ -547,7 +568,35 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color4">vim</a>
+                <a href="javascript:void(0)" class="js-tag color2">golang</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color3">mongodb</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color2">wechat</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color2">python</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color2">celery</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color1">redis</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color1">微信公众号</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color5">微信支付</a>
               </li>
              
               <li class="article-tag-list-item">
@@ -572,14 +621,6 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color1">cpp14</a>
-              </li>
-             
-              <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color3">字体</a>
-              </li>
-             
-              <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color4">fc-cache</a>
               </li>
             
             <div class="clearfix"></div>

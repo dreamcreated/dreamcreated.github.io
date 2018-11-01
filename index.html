@@ -155,6 +155,137 @@
           <div id="js-content" class="content-ll">
             
   
+    <article id="post-初次使用golang和mongodb开发一个完整产品的一些笔记" class="article article-type-post  article-index" itemscope itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2018/11/01/初次使用golang和mongodb开发一个完整产品的一些笔记/">初次使用golang和mongodb开发一个完整产品的一些笔记</a>
+    </h1>
+  
+
+        
+        <a href="/2018/11/01/初次使用golang和mongodb开发一个完整产品的一些笔记/" class="archive-article-date">
+  	<time datetime="2018-11-01T12:59:07.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2018-11-01</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <h1 id="缘起"><a href="#缘起" class="headerlink" title="缘起"></a>缘起</h1><p>几个同行相约用业余时间开发一款社交应用,客户端就是微信公众号H5,因为是个人项目,我就不太想用自己擅长的C++了,麻烦不说,写起来也挺没趣,之前断断续续也用golang写了几个服务,觉得很适合用来写后台,于是技术选型就敲定golang啦.<br>考虑到最好需要业务中用户之间并无太多交集,用非关系型的nosql数据库开发效率更高,在redis和mongodb之间犹豫了许久,最终选了mongodb,原因无他,redis实在是太熟悉,对这东西没啥兴趣了,而且redis纯内存对服务器成本要求也太大,万一到时候用户量上去没有日活,我redis开着吃那么多内存浪费钱嘛.所以就选了mongodb.</p>
+<h1 id="需求"><a href="#需求" class="headerlink" title="需求"></a>需求</h1><p>产品需求大概就是提供一个看别人发的信息,同时可以领取红包的功能<br>对于发送信息方,付出少量的金钱可以使自己的信息得到传播,比如房屋招租, 寻狗启事等<br>对于接收信息方,查阅信息即可以瓜分到现金,如果帮助传播,则自己的份额+1,可以获得更多的现金<br>盈利模式就是在用户提现时收取几个点的手续费.</p>
+<h1 id="任务拆分"><a href="#任务拆分" class="headerlink" title="任务拆分"></a>任务拆分</h1><p>根据以上需求,可以大概预算到,这样一个项目后台的核心功能<br>1.用户体系<br>2.微信支付以及提现<br>3.便签核心能力<br>4.用户钱包,维护用户余额</p>
+<h2 id="用户体系"><a href="#用户体系" class="headerlink" title="用户体系"></a>用户体系</h2><p>1.新用户进入自动注册和登录<br>2.老用户进入自动登录<br>3.提供gin中间件,给每个登录态接口鉴权,检查用户登录态是否有效</p>
+<h2 id="微信支付以及提现"><a href="#微信支付以及提现" class="headerlink" title="微信支付以及提现"></a>微信支付以及提现</h2><ol>
+<li>用户发布红包便签时提供微信支付功能</li>
+<li>用户通过查看便签获得的红包,在存入余额后申请提现,可以通过企业红包成功提现到自己的微信号上</li>
+<li>提现功能因为需要使用证书,而微信官方并没有提供golang的sdk, 所以借助于python实现,通过celery任务管理框架和golang进行通信</li>
+</ol>
+<h2 id="便签核心能力"><a href="#便签核心能力" class="headerlink" title="便签核心能力"></a>便签核心能力</h2><ol>
+<li>提供管理用户便签的能力,具体如下</li>
+<li>发布便签,先发布一个便签,状态设置为未支付,对未支付便签进行限制,不允许通过关注未支付便签瓜分红包和分享. 使用微信统一下单,获取支付参数下发给前端,前端通过支付参数包调起微信支付,支付成功后收到回调,回调中把便签支付状态修改为已支付,完成整个发布流程.</li>
+<li>订阅便签,用户通过订阅和查看其他人发布的便签获得红包瓜分份额,自己订阅份额+1,分享出去后别人通过你的分享进来便签页,自己的订阅份额也+1.</li>
+<li>瓜分红包,当某个便签的到达指定时间点后,用户可以根据自己的份额进行瓜分,瓜分到的现金存入余额.</li>
+</ol>
+<h2 id="用户钱包-维护用户余额"><a href="#用户钱包-维护用户余额" class="headerlink" title="用户钱包,维护用户余额"></a>用户钱包,维护用户余额</h2><ol>
+<li>提供取现功能和存入余额功能</li>
+<li>提现功能注意处理数据一致性,不能让用户通过并发手段把一份钱取多次,这里借助了mongodb的findAndModify功能,并发去写入一个flag,最终写入成功的只有一个,只有写成功的线程才可以继续执行下面的提现操作.</li>
+<li>存入余额这里也需要注意数据一致性,不能让用户通过并发手段把一个红包应该分得的钱多次存入余额,这里借助了mongodb的findAndModify功能,并发去写入一个flag,最终写成功的只有一个,只有写成功的线程才可以继续执行下面的存入余额操作.</li>
+</ol>
+<h1 id="项目结构"><a href="#项目结构" class="headerlink" title="项目结构:"></a>项目结构:</h1><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div></pre></td><td class="code"><pre><div class="line">├── Authorize   //用户认证,包括用户登录,登陆后token鉴权</div><div class="line">├── CeleryTasks  //Celery脚本, 用于访问微信api和海报生成</div><div class="line">├── CeleryWrapper  //go访问celery的wrapper</div><div class="line">├── cert  //微信证书</div><div class="line">├── Common  //公共代码,很多地方需要使用的公共函数放在这里,如从头中获取userId,生成一个新的userId,获取一个mongodb的session等</div><div class="line">├── config   //配置文件,如微信支付的相关配置,mongodb地址的配置等</div><div class="line">├── ConfigManager  //配置管理器,用于在任何地方都可以方便的读取配置</div><div class="line">├── ErrorCodes   //错误码定义</div><div class="line">├── Handlers   //消息处理代码</div><div class="line">├── ImageProcessor   //图片处理器,因为海报生成部分最后使用celery配合wkhtmltopdf把html转图片,所以这部分代码废弃</div><div class="line">├── Logger  //日志相关代码,日志打印使用了logrus库,这里把logrus包装成一个middleware和gin框架结合使用,最终的目的是让gin框架把请求和回包日志用logrus打印出来</div><div class="line">├── NoteManager  //便签管理,和便签相关的代码都在这里面</div><div class="line">├── Pay     //支付相关</div><div class="line">│   └── WechatPay   //目前只支持微信支付,和微信支付相关的代码都在这里</div><div class="line">├── Resources   //图片等静态资源</div><div class="line">└── UserManager   //用户管理,和用户相关的代码都在这里</div></pre></td></tr></table></figure>
+<h1 id="一些随想"><a href="#一些随想" class="headerlink" title="一些随想"></a>一些随想</h1><ol>
+<li>通过开发这个项目,让自己对golang有一个比较全面的了解,熟悉了golang代码的组织形式,第三方库的路径之类的golang开发环境特有的一些问题</li>
+<li>golang严格定义了一些其他语言里面灵活的东西,比如括号问题,函数的开始括号一定要在函数声明的第一行,这一点我觉得很赞,其实很多东西不太需要自由,方案a也行b也行,但是如果没人拍板就会制造混乱,如果硬性规定统一一下就很好.</li>
+<li>golang的警告不完全消除就不允许编译通过,这个特性我看到的时候心里默默点了个赞,但是开发完一套程序就想说mmp了,很多时候写测试代码时,经常会屏蔽某些代码,就会导致notused的warnning,然后导致程序无法编译通过,只有把声明变量或者import的语句注释掉才可以编译过,很难受.</li>
+<li>golang的代码风格是使用返回值来返回错误码, 因为golang支持多返回值,所以通常第一个返回值表示真正要返回的数据,第二个返回值表示错误码, 这个会导致错误处理的代码冗余,如果层级调用过深,每个层级都需要处理很多错误码.但是好处是编写代码的时候会自觉的处理好能想到的异常情况</li>
+<li>golang弱化了面向对象的概念,其实我觉得面向对象在几年前很火,但是很多中小型项目基本上用不到,所以弄出什么单例模式,其实就是面向对象的退化.golang可以允许函数单独的存在,这一点我觉得非常赞.毕竟后台开发更重要的是并发而不是所谓的模式.</li>
+<li>从语言层面提供goroutine这种功能真的特别赞.有人说C++也有协程(windows上叫纤程(Fiber)),这玩意其实不新鲜,2012年我们研发游戏时就用到过,当时没有第三方库可参考,都是自己手撸代码,后来在16年的时候看到腾讯出了一个libco,通过hook socket相关函数的方式无痛改造,把所有的socket操作都变成异步的. 我马上把这个库用在了当时项目的thrift框架上, 记得当时的成绩是让8核机器可以跑满7个核, 比全同步只能跑满4个核好了不少, 吞吐量也上去了, 但是费了不少劲. 把thrift的线程池改造成了协程池. 所以用C++搞协程,要操心很多地方,主要是第三方库不好改, 腾讯的libco算是另辟蹊径了. golang的伟大之处是把这东西固化到语言里面,直接让所有第三方库全异步.</li>
+<li>golang作为最近几年大火的语言,第三方库却始终跟不上,让人很奇怪,比如mongodb这么多年了,竟然都没有一个官方的drive, 最流行的mgo是一个第三方库.很多功能如果借助python实现会方便很多.这里不得不感慨python确实是开发效率很高的开发环境.</li>
+</ol>
+
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+	<div class="article-tag tagcloud">
+		<i class="icon-price-tags icon"></i>
+		<ul class="article-tag-list">
+			 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color2">golang</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">mongodb</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color2">wechat</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color2">python</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color2">celery</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">redis</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">微信公众号</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color5">微信支付</a>
+        		</li>
+      		
+		</ul>
+	</div>
+
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2018/11/01/初次使用golang和mongodb开发一个完整产品的一些笔记/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
     <article id="post-使用nginx-lua实现对阿里云OSS文件的实时解密" class="article article-type-post  article-index" itemscope itemprop="blogPost">
   <div class="article-inner">
     
@@ -538,6 +669,10 @@
 		<ul class="article-tag-list">
 			 
         		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color2">ubuntu</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
         			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">mysql</a>
         		</li>
       		 
@@ -547,10 +682,6 @@
       		 
         		<li class="article-tag-list-item">
         			<a href="javascript:void(0)" class="js-tag article-tag-list-link color5">libmysqlclient</a>
-        		</li>
-      		 
-        		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color2">ubuntu</a>
         		</li>
       		 
         		<li class="article-tag-list-item">
@@ -730,6 +861,10 @@
 		<ul class="article-tag-list">
 			 
         		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color2">ubuntu</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
         			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">mysql</a>
         		</li>
       		 
@@ -739,10 +874,6 @@
       		 
         		<li class="article-tag-list-item">
         			<a href="javascript:void(0)" class="js-tag article-tag-list-link color5">libmysqlclient</a>
-        		</li>
-      		 
-        		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color2">ubuntu</a>
         		</li>
       		 
         		<li class="article-tag-list-item">
@@ -828,11 +959,11 @@
         		</li>
       		 
         		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">随笔</a>
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">linux</a>
         		</li>
       		 
         		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">linux</a>
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">随笔</a>
         		</li>
       		 
         		<li class="article-tag-list-item">
@@ -1024,15 +1155,15 @@
         		</li>
       		 
         		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">vim</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
         			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">编辑器</a>
         		</li>
       		 
         		<li class="article-tag-list-item">
         			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">ide</a>
-        		</li>
-      		 
-        		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">vim</a>
         		</li>
       		
 		</ul>
@@ -1082,7 +1213,7 @@
   <div class="outer">
     <div id="footer-info">
     	<div class="footer-left">
-    		&copy; 2017 David Lee
+    		&copy; 2018 David Lee
     	</div>
       	<div class="footer-right">
       		<a href="http://hexo.io/" target="_blank">Hexo</a>  Theme <a href="https://github.com/litten/hexo-theme-yilia" target="_blank">Yilia</a> by Litten
@@ -1165,6 +1296,18 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
           <ul class="article-tag-list" q-show="showTags">
              
               <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color2">ubuntu</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color3">apt-get</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color1">linux</a>
+              </li>
+             
+              <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color1">mysql</a>
               </li>
              
@@ -1177,23 +1320,23 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color2">ubuntu</a>
-              </li>
-             
-              <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color3">随笔</a>
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color3">apt-get</a>
+                <a href="javascript:void(0)" class="js-tag color3">字体</a>
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color1">linux</a>
+                <a href="javascript:void(0)" class="js-tag color4">fc-cache</a>
               </li>
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color1">emacs</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color4">vim</a>
               </li>
              
               <li class="article-tag-list-item">
@@ -1241,7 +1384,35 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color4">vim</a>
+                <a href="javascript:void(0)" class="js-tag color2">golang</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color3">mongodb</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color2">wechat</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color2">python</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color2">celery</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color1">redis</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color1">微信公众号</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color5">微信支付</a>
               </li>
              
               <li class="article-tag-list-item">
@@ -1266,14 +1437,6 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color1">cpp14</a>
-              </li>
-             
-              <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color3">字体</a>
-              </li>
-             
-              <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color4">fc-cache</a>
               </li>
             
             <div class="clearfix"></div>
