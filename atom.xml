@@ -6,7 +6,7 @@
   <link href="/atom.xml" rel="self"/>
   
   <link href="http://lida.site/"/>
-  <updated>2018-11-02T08:17:52.058Z</updated>
+  <updated>2018-12-10T09:05:00.959Z</updated>
   <id>http://lida.site/</id>
   
   <author>
@@ -21,9 +21,9 @@
     <link href="http://lida.site/2018/11/02/%E9%98%BF%E9%87%8C%E4%BA%91redis%E8%BF%81%E7%A7%BB%E5%88%B0pika/"/>
     <id>http://lida.site/2018/11/02/阿里云redis迁移到pika/</id>
     <published>2018-11-02T13:15:39.000Z</published>
-    <updated>2018-11-02T08:17:52.058Z</updated>
+    <updated>2018-12-10T09:05:00.959Z</updated>
     
-    <content type="html"><![CDATA[<h1 id="Why"><a href="#Why" class="headerlink" title="Why"></a>Why</h1><p>项目要求快速上线,因为redis支持丰富的数据结构,所以开发初期便把部分数据直接存储到redis,几个月之后用户量上来了,累积了很多数据,其中绝大多数都是冷数据,用户一百年也不会访问一次的.相比磁盘来说,内存虽然快但是很贵,而这部分数据没必要放在内存中.于是就要想办法把这部分数据迁移出来.</p><h1 id="How"><a href="#How" class="headerlink" title="How"></a>How</h1><p>这种事情以前干过一次,把这部分数据迁移到mysql,但是这样做的麻烦之处在于要修改整个存储逻辑,因为使用sql和nosql的整个设计思路都是不一样的,很多地方要用完全不同的实现方式,工作量巨大且风险高.<br>其实仔细思考,redis的协议并不只是适用于纯内存数据库,我的需求就是兼容redis协议,但是能把部分冷数据落地到磁盘,然后从内存中清除,当有请求过来时再把这部分数据load到内存.<br>所以最开始的思路是使用redis-rdb-tools导出所有key以及key占用的size,分析当前redis内究竟是哪种类型的key占用了最大的内存,然后做一个proxy,把这部分key的redis请求发送到proxy, 在proxy上把相关命令的协议实现,然后实现刚才提到的缓存的逻辑.<br>后来,我google了一下,发现了<a href="https://github.com/Qihoo360/pika" target="_blank" rel="external">pika</a>数据库,似乎可以完美的适应我的需求,看到测试数据,性能大概是redis的50%,完全够用了.</p><h2 id="Converting-amp-Importing"><a href="#Converting-amp-Importing" class="headerlink" title="Converting&amp;Importing"></a>Converting&amp;Importing</h2><p>pika项目组提供了一个数据导入的<a href="https://github.com/Qihoo360/pika/wiki/Redis%E5%88%B0pika%E8%BF%81%E7%A7%BB%E5%B7%A5%E5%85%B7" target="_blank" rel="external">工具</a>,功能和redis-cli –pipe一样,通过管道批量执行命令,这种导入只适用于appendonly.aof文件,并不适用于dump.rdb文件<br>其实如果是正常自建的redis,完全可以开启appendonly落地模式,然后使用这个工具,在导入完完整的appendonly文件后,继续导入新增的数据,可以实现线上不停机的平滑迁移.<br>可惜阿里云的Redis服务不提供appendonly文件, 也不提供sync/psync命令,所以没法做平滑迁移.<br>最后采用的方案是在迁移过程中让业务侧停止写入,迁移完成后再开放.<br>从阿里云上拿到的redis数据文件是dump文件,如何把他变成appendonly格式的文件也是个问题.自然而然的想到先用redis-server读取dump文件,然后关掉save,开启appendonly模式,执行bgrewriteaof命令生成一个appendonly.aof文件.<br>这个方案在迁移第一个库的时候管用,在迁移第二个库时就不行了,因为第二个库太大,load到内存后,没有办法再开启一个同样内存大小的异步进程去rewrite.<br>为了解决这个问题,我使用了<a href="https://github.com/sripathikrishnan/redis-rdb-tools" target="_blank" rel="external">redis-rdb-tools</a>,这个工具可以读取dump文件把aof格式的协议数据输出到标准输出流.<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">nohup rdb -n 1 --command protocol ./dump.rdb | redis-cli -p 6380  --pipe &amp;   //-n 1表示只导入idx为1的库(select 1)</div></pre></td></tr></table></figure></p><h2 id="Check-amp-Tets"><a href="#Check-amp-Tets" class="headerlink" title="Check&amp;Tets"></a>Check&amp;Tets</h2><p>在线上环境找了一台负载不高的机器,创建了一个测试库,给线上redis做个快照,然后把数据导入到pika,利用<a href="https://github.com/Qihoo360/pika/wiki/Redis%E8%AF%B7%E6%B1%82%E5%AE%9E%E6%97%B6copy%E5%88%B0pika%E5%B7%A5%E5%85%B7" target="_blank" rel="external">redis-copy</a>工具,把线上环境的redis收到的所有命令都copy到测试库上,以此来检测我们目前用到的命令有哪些是pika不兼容的.<br>通过这个办法,我发现rename命令在pika里面是没有的,使用到rename命令的代码需要修改,只能把要rename的key的value get出来,然后再重新用新的key set回去.</p><h2 id="Done"><a href="#Done" class="headerlink" title="Done"></a>Done</h2><p>删除原库数据时一定要仔细核对,确保迁移过去后,原库的待删除key没有增加,以此保证所有的服务器都指向到了新的pika服务.<br>通过这个流程,最终成功完成了两个业务库的迁移,现在线上环境已经使用pika跑了一周了,暂时没有出现任何异常.</p>]]></content>
+    <content type="html"><![CDATA[<h1 id="Why"><a href="#Why" class="headerlink" title="Why"></a>Why</h1><p>项目要求快速上线,因为redis支持丰富的数据结构,所以开发初期便把部分数据直接存储到redis,几个月之后用户量上来了,累积了很多数据,其中绝大多数都是冷数据,用户一百年也不会访问一次的.相比磁盘来说,内存虽然快但是很贵,而这部分数据没必要放在内存中.于是就要想办法把这部分数据迁移出来.</p><h1 id="How"><a href="#How" class="headerlink" title="How"></a>How</h1><p>这种事情以前干过一次,把这部分数据迁移到mysql,但是这样做的麻烦之处在于要修改整个存储逻辑,因为使用sql和nosql的整个设计思路都是不一样的,很多地方要用完全不同的实现方式,工作量巨大且风险高.<br>其实仔细思考,redis的协议并不只是适用于纯内存数据库,我的需求就是兼容redis协议,但是能把部分冷数据落地到磁盘,然后从内存中清除,当有请求过来时再把这部分数据load到内存.<br>所以最开始的思路是使用redis-rdb-tools导出所有key以及key占用的size,分析当前redis内究竟是哪种类型的key占用了最大的内存,然后做一个proxy,把这部分key的redis请求发送到proxy, 在proxy上把相关命令的协议实现,然后实现刚才提到的缓存的逻辑.<br>后来,我google了一下,发现了<a href="https://github.com/Qihoo360/pika" target="_blank" rel="external">pika</a>数据库,似乎可以完美的适应我的需求,看到测试数据,性能大概是redis的50%,完全够用了.</p><h2 id="Converting-amp-Importing"><a href="#Converting-amp-Importing" class="headerlink" title="Converting&amp;Importing"></a>Converting&amp;Importing</h2><p>pika项目组提供了一个数据导入的<a href="https://github.com/Qihoo360/pika/wiki/Redis%E5%88%B0pika%E8%BF%81%E7%A7%BB%E5%B7%A5%E5%85%B7" target="_blank" rel="external">工具</a>,功能和redis-cli –pipe一样,通过管道批量执行命令,这种导入只适用于appendonly.aof文件,并不适用于dump.rdb文件<br>其实如果是正常自建的redis,完全可以开启appendonly落地模式,然后使用这个工具,在导入完完整的appendonly文件后,继续导入新增的数据,可以实现线上不停机的平滑迁移.<br>可惜阿里云的Redis服务不提供appendonly文件, 也不提供sync/psync命令,所以没法做平滑迁移.<br>最后采用的方案是在迁移过程中让业务侧停止写入,迁移完成后再开放.<br>从阿里云上拿到的redis数据文件是dump文件,如何把他变成appendonly格式的文件也是个问题.自然而然的想到先用redis-server读取dump文件,然后关掉save,开启appendonly模式,执行bgrewriteaof命令生成一个appendonly.aof文件.<br>这个方案在迁移第一个库的时候管用,在迁移第二个库时就不行了,因为第二个库太大,load到内存后,没有办法再开启一个同样内存大小的异步进程去rewrite.<br>为了解决这个问题,我使用了<a href="https://github.com/sripathikrishnan/redis-rdb-tools" target="_blank" rel="external">redis-rdb-tools</a>,这个工具可以读取dump文件把aof格式的协议数据输出到标准输出流.<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">nohup rdb -n 1 --command protocol ./dump.rdb | redis-cli -p 6380  --pipe &amp;   //-n 1表示只导入idx为1的库(select 1)</div></pre></td></tr></table></figure></p><h2 id="Check-amp-Test"><a href="#Check-amp-Test" class="headerlink" title="Check&amp;Test"></a>Check&amp;Test</h2><p>在线上环境找了一台负载不高的机器,创建了一个测试库,给线上redis做个快照,然后把数据导入到pika,利用<a href="https://github.com/Qihoo360/pika/wiki/Redis%E8%AF%B7%E6%B1%82%E5%AE%9E%E6%97%B6copy%E5%88%B0pika%E5%B7%A5%E5%85%B7" target="_blank" rel="external">redis-copy</a>工具,把线上环境的redis收到的所有命令都copy到测试库上,以此来检测我们目前用到的命令有哪些是pika不兼容的.<br>通过这个办法,我发现rename命令在pika里面是没有的,使用到rename命令的代码需要修改,只能把要rename的key的value get出来,然后再重新用新的key set回去.</p><h2 id="Done"><a href="#Done" class="headerlink" title="Done"></a>Done</h2><p>删除原库数据时一定要仔细核对,确保迁移过去后,原库的待删除key没有增加,以此保证所有的服务器都指向到了新的pika服务.<br>通过这个流程,最终成功完成了两个业务库的迁移,现在线上环境已经使用pika跑了一周了,暂时没有出现任何异常.</p>]]></content>
     
     <summary type="html">
     
@@ -62,8 +62,6 @@
     </summary>
     
     
-      <category term="redis" scheme="http://lida.site/tags/redis/"/>
-    
       <category term="golang" scheme="http://lida.site/tags/golang/"/>
     
       <category term="mongodb" scheme="http://lida.site/tags/mongodb/"/>
@@ -73,6 +71,8 @@
       <category term="python" scheme="http://lida.site/tags/python/"/>
     
       <category term="celery" scheme="http://lida.site/tags/celery/"/>
+    
+      <category term="redis" scheme="http://lida.site/tags/redis/"/>
     
       <category term="微信公众号" scheme="http://lida.site/tags/%E5%BE%AE%E4%BF%A1%E5%85%AC%E4%BC%97%E5%8F%B7/"/>
     
@@ -193,13 +193,13 @@
     </summary>
     
     
+      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
+    
       <category term="mysql" scheme="http://lida.site/tags/mysql/"/>
     
       <category term="crash" scheme="http://lida.site/tags/crash/"/>
     
       <category term="libmysqlclient" scheme="http://lida.site/tags/libmysqlclient/"/>
-    
-      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
     
       <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
     
@@ -251,13 +251,13 @@
     </summary>
     
     
+      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
+    
       <category term="mysql" scheme="http://lida.site/tags/mysql/"/>
     
       <category term="crash" scheme="http://lida.site/tags/crash/"/>
     
       <category term="libmysqlclient" scheme="http://lida.site/tags/libmysqlclient/"/>
-    
-      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
     
       <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
     
@@ -286,9 +286,9 @@
     
       <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
     
-      <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
-    
       <category term="linux" scheme="http://lida.site/tags/linux/"/>
+    
+      <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
     
       <category term="字体" scheme="http://lida.site/tags/%E5%AD%97%E4%BD%93/"/>
     
@@ -352,11 +352,11 @@
     
       <category term="emacs" scheme="http://lida.site/tags/emacs/"/>
     
+      <category term="vim" scheme="http://lida.site/tags/vim/"/>
+    
       <category term="编辑器" scheme="http://lida.site/tags/%E7%BC%96%E8%BE%91%E5%99%A8/"/>
     
       <category term="ide" scheme="http://lida.site/tags/ide/"/>
-    
-      <category term="vim" scheme="http://lida.site/tags/vim/"/>
     
   </entry>
   
