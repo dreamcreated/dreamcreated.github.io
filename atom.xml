@@ -6,7 +6,7 @@
   <link href="/atom.xml" rel="self"/>
   
   <link href="http://lida.site/"/>
-  <updated>2018-12-10T09:05:00.959Z</updated>
+  <updated>2019-04-10T07:46:51.971Z</updated>
   <id>http://lida.site/</id>
   
   <author>
@@ -15,6 +15,27 @@
   </author>
   
   <generator uri="http://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>端口明明已经监听了为什么还是访问不了呢</title>
+    <link href="http://lida.site/2019/04/09/%E7%AB%AF%E5%8F%A3%E6%98%8E%E6%98%8E%E5%B7%B2%E7%BB%8F%E7%9B%91%E5%90%AC%E4%BA%86%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%98%E6%98%AF%E8%AE%BF%E9%97%AE%E4%B8%8D%E4%BA%86%E5%91%A2/"/>
+    <id>http://lida.site/2019/04/09/端口明明已经监听了为什么还是访问不了呢/</id>
+    <published>2019-04-09T08:17:12.000Z</published>
+    <updated>2019-04-10T07:46:51.971Z</updated>
+    
+    <content type="html"><![CDATA[<p>有一个mysql,是通过docker启动的, 端口是3306, network是host模式, 直接使用本机ip监听端口.<br>某天服务器重启以后怎么样都没办法访问3306端口.<br>netstat查看确实3306端口处于监听状态<br>但是可以127.0.0.1:3306 这样访问<br>把服务关掉后<br>观察到 telnet {hostIp} 3306 会一直trying, 而正常没有监听的端口是直接报错connect refused<br>所以怀疑是不是被劫持了<br>查看iptables, 发现有几个和3306相关的东西:</p><p>命令<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div></pre></td><td class="code"><pre><div class="line">sudo iptables -t nat -L --line-numbers</div><div class="line">sudo iptables -t filter -L --line-numbers</div><div class="line">sudo iptables -t raw -L --line-numbers</div><div class="line">sudo iptables -L -t mangle --line-numbers</div></pre></td></tr></table></figure></p><p>结果<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line">Chain DOCKER (3 references)</div><div class="line">num  target     prot opt source               destination         </div><div class="line">1    ACCEPT     tcp  --  anywhere             172.20.0.101         tcp dpt:mysql</div></pre></td></tr></table></figure></p><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div></pre></td><td class="code"><pre><div class="line"></div><div class="line">Chain POSTROUTING (policy ACCEPT)</div><div class="line">num  target     prot opt source               destination         </div><div class="line">1    MASQUERADE  all  --  172.20.0.0/16        anywhere            </div><div class="line">5    MASQUERADE  tcp  --  172.20.0.101         172.20.0.101         tcp dpt:mysql</div></pre></td></tr></table></figure><p>因为172.20这个ip完全陌生,所以备份之后尝试删除,删除之后就没问题了</p><p>删除命令:<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line">sudo iptables -t nat -D DOCKER 4</div><div class="line">sudo iptables -t nat -D POSTROUTING 1</div><div class="line">sudo iptables -t filter -D DOCKER 1</div></pre></td></tr></table></figure></p><p>删完记得保存配置</p><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">sudo su</div><div class="line">iptables-save &gt; /etc/iptables-rules</div></pre></td></tr></table></figure><p>问题解决.</p>]]></content>
+    
+    <summary type="html">
+    
+      
+      
+        &lt;p&gt;有一个mysql,是通过docker启动的, 端口是3306, network是host模式, 直接使用本机ip监听端口.&lt;br&gt;某天服务器重启以后怎么样都没办法访问3306端口.&lt;br&gt;netstat查看确实3306端口处于监听状态&lt;br&gt;但是可以127.0.0.1:33
+      
+    
+    </summary>
+    
+    
+  </entry>
   
   <entry>
     <title>阿里云redis迁移到pika</title>
@@ -352,11 +373,11 @@
     
       <category term="emacs" scheme="http://lida.site/tags/emacs/"/>
     
-      <category term="vim" scheme="http://lida.site/tags/vim/"/>
-    
       <category term="编辑器" scheme="http://lida.site/tags/%E7%BC%96%E8%BE%91%E5%99%A8/"/>
     
       <category term="ide" scheme="http://lida.site/tags/ide/"/>
+    
+      <category term="vim" scheme="http://lida.site/tags/vim/"/>
     
   </entry>
   

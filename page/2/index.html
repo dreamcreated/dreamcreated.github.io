@@ -165,6 +165,106 @@ var _hmt = _hmt || [];
           <div id="js-content" class="content-ll">
             
   
+    <article id="post-how-to-jump-to-previous-position-in-emacs" class="article article-type-post  article-index" itemscope itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2017/08/22/how-to-jump-to-previous-position-in-emacs/">在emacs中跳转光标到之前所在位置的几个方法</a>
+    </h1>
+  
+
+        
+        <a href="/2017/08/22/how-to-jump-to-previous-position-in-emacs/" class="archive-article-date">
+  	<time datetime="2017-08-22T09:18:11.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2017-08-22</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <p>仔细找了一下,有几个命令可以提供类似的功能:</p>
+<blockquote>
+<p>pop-global-mark C-x C-SPC</p>
+</blockquote>
+<p>这个命令提供了全局跳转到光标之前所在位置的功能,实际上这里也会有一个光标位置的list, 我安装了helm插件,所以有命令helm-global-mark-ring可以查看当前保存了哪些位置,这些位置信息就是一个环形队列, 使用pop-global-mark 来pop这个队列的最后一个元素,然后跳转过去.<br>试用后发现这个命令只有在显式使用C+SPC 进行 mark 操作并且马上切换到其他buffer时才会记录之前的位置, 而且同一个buffer记录的位置如果不pop掉,那么下次在同一个buffer内mark 其他位置也不会被放到global-mark-ring里面<br>用法比较奇怪.因为buffer之间的切换本来就很简单,C-x C-b 可以很方便的浏览所有的buffer并切换，切换buffer之前mark一下有点累赘了,所以个人感觉还是下一个命令适用范围比较广.</p>
+<blockquote>
+<p>C-u C-SPC</p>
+</blockquote>
+<p>这个命令会记录你的每次移动之前的位置,随便翻页,或者慢速上下移动光标,都会被记录,但是仅限当前buffer. 很多场景下也够用了, 如果安装了helm插件，可以通过helm-all-mark-rings来观察记录的位置</p>
+<blockquote>
+<p>helm-all-mark-rings</p>
+</blockquote>
+<p>这个命令可以很方便的查看当前所有的mark,当按快捷键得到的结果不符合预期时,可以再通过这个命令找到正确的跳转地址.</p>
+<p>通过这三个命令应该可以更方便的在各种文件中jump了。</p>
+<p>ps: 如果helm出现了两个结果列表(例如helm-all-mark-rings),可以使用C-o和M-o来切换列表, 前者表示next, 后者表示previous.</p>
+
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+	<div class="article-tag tagcloud">
+		<i class="icon-price-tags icon"></i>
+		<ul class="article-tag-list">
+			 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">随笔</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">emacs</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">编辑器</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">ide</a>
+        		</li>
+      		
+		</ul>
+	</div>
+
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2017/08/22/how-to-jump-to-previous-position-in-emacs/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
     <article id="post-new_blog_new_thought" class="article article-type-post  article-index" itemscope itemprop="blogPost">
   <div class="article-inner">
     
@@ -209,15 +309,15 @@ var _hmt = _hmt || [];
         		</li>
       		 
         		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">vim</a>
-        		</li>
-      		 
-        		<li class="article-tag-list-item">
         			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">编辑器</a>
         		</li>
       		 
         		<li class="article-tag-list-item">
         			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">ide</a>
+        		</li>
+      		 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color4">vim</a>
         		</li>
       		
 		</ul>
@@ -271,7 +371,7 @@ var _hmt = _hmt || [];
   <div class="outer">
     <div id="footer-info">
     	<div class="footer-left">
-    		&copy; 2018 David Lee
+    		&copy; 2019 David Lee
     	</div>
       	<div class="footer-right">
       		<a href="http://hexo.io/" target="_blank">Hexo</a>  Theme <a href="https://github.com/litten/hexo-theme-yilia" target="_blank">Yilia</a> by Litten
@@ -394,15 +494,27 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color4">vim</a>
-              </li>
-             
-              <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color4">编辑器</a>
               </li>
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color4">ide</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color4">vim</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color3">抓包</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color3">tcpdump</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color5">wireshark</a>
               </li>
              
               <li class="article-tag-list-item">
@@ -427,18 +539,6 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color4">oss</a>
-              </li>
-             
-              <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color3">抓包</a>
-              </li>
-             
-              <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color3">tcpdump</a>
-              </li>
-             
-              <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color5">wireshark</a>
               </li>
              
               <li class="article-tag-list-item">
