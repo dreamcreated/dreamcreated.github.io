@@ -6,7 +6,7 @@
   <link href="/atom.xml" rel="self"/>
   
   <link href="http://lida.site/"/>
-  <updated>2019-04-25T07:58:21.465Z</updated>
+  <updated>2019-04-25T08:04:01.911Z</updated>
   <id>http://lida.site/</id>
   
   <author>
@@ -21,7 +21,7 @@
     <link href="http://lida.site/2019/04/25/Modern-C-%E6%8F%92%E5%85%A5%E5%85%83%E7%B4%A0%E5%88%B0%E5%AE%B9%E5%99%A8%E7%9A%84%E6%AD%A3%E7%A1%AE%E5%81%9A%E6%B3%95/"/>
     <id>http://lida.site/2019/04/25/Modern-C-插入元素到容器的正确做法/</id>
     <published>2019-04-25T07:38:55.000Z</published>
-    <updated>2019-04-25T07:58:21.465Z</updated>
+    <updated>2019-04-25T08:04:01.911Z</updated>
     
     <content type="html"><![CDATA[<p>在C++98标准中, 我们向vector或者map等常用容器中插入新的元素时,只能使用push_back和insert, 这两个函数不可避免的调用了复制构造函数,导致不必要的复制行为发生.在C++11以及之后的标准中,插入元素这一行为多了一个选项,那就是 emplace.<br>那么, 他和push_back以及insert 的区别是什么呢? 顾名思义, emplace的字面意思是从内部构造, 如果我们写过模板函数,给出一个类型T,我们可以自己去构造一个T而不是要求外部传入T的实例, 考虑到以下代码</p><figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div></pre></td><td class="code"><pre><div class="line"><span class="class"><span class="keyword">class</span> <span class="title">Foo</span> &#123;</span></div><div class="line"><span class="keyword">public</span>:</div><div class="line">    Foo(<span class="keyword">const</span> <span class="built_in">std</span>::<span class="built_in">string</span>&amp; s) : m_s(s) &#123;&#125;</div><div class="line"><span class="keyword">private</span>:</div><div class="line">    <span class="built_in">std</span>::<span class="built_in">string</span> m_s;</div><div class="line">&#125;;</div><div class="line"><span class="built_in">std</span>::<span class="built_in">vector</span>&lt;Foo&gt; foos;</div><div class="line"><span class="comment">// push_back用法:</span></div><div class="line">foos.push_back(Foo(<span class="string">"bar"</span>));</div><div class="line"><span class="comment">//emplace_back用法:</span></div><div class="line">foos.emplace_back(<span class="string">"bar"</span>);</div></pre></td></tr></table></figure><p>push_back 是要求给一个Foo的实例,然后进行插入, 而emplace_back 只需要给出类型的构造实参即可, emplace_back通过完美转发的方式, 直接把实参转发给容器元素的类型,然后在内部构造一个新的元素实例,这样就避免了拷贝.</p><p>以上是vector容器的用法,那么map容器有两个类型, TKey和TValue, emplace的参数如何传递呢?</p><figure class="highlight c++"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div></pre></td><td class="code"><pre><div class="line"><span class="built_in">std</span>::<span class="built_in">map</span>&lt;<span class="keyword">int</span>, Foo&gt; foos;</div><div class="line"><span class="comment">//传统insert的用法:</span></div><div class="line">foos.insert(<span class="number">10</span>, Foo(<span class="string">"bar1"</span>));</div><div class="line"><span class="comment">//emplace的用法之一,但是仍然无法避免拷贝:</span></div><div class="line">foos.emplace(<span class="number">11</span>, Foo(<span class="string">"bar2"</span>));</div><div class="line"><span class="comment">//empalce完美转发的用法,可以完全避免拷贝:</span></div><div class="line">foos.emplace(<span class="built_in">std</span>::piecewise_construct, <span class="built_in">std</span>::forward_as_tuple(<span class="number">12</span>), <span class="built_in">std</span>::forward_as_tuple(<span class="string">"bar3"</span>));</div></pre></td></tr></table></figure><p>从语法上来说, map的emplace传参要解决的问题就是,如何区分TKey的构造实参和TValue的构造实参, map通过std::piecewise_construct和 tuple完美解决了这一问题, tuple可以容纳任意类型任意个数的参数, 在函数收到一个tuple时,也可以通过一些方法进行unpack, 所以不难想象, emplace内部是把第二个和第三个实参进行unpack后forward到TKey的构造函数和TValue的构造函数.</p><p>有了emplace后, 基本上就不会再用push_back和insert了,emplace完全可以做到同样的事情,但是性能会提升很多.</p>]]></content>
     
@@ -37,17 +37,17 @@
     
       <category term="stl" scheme="http://lida.site/tags/stl/"/>
     
-      <category term="c++11" scheme="http://lida.site/tags/c-11/"/>
-    
-      <category term="c++14" scheme="http://lida.site/tags/c-14/"/>
-    
-      <category term="modern c++" scheme="http://lida.site/tags/modern-c/"/>
-    
       <category term="map" scheme="http://lida.site/tags/map/"/>
     
       <category term="vector" scheme="http://lida.site/tags/vector/"/>
     
       <category term="perfect forward" scheme="http://lida.site/tags/perfect-forward/"/>
+    
+      <category term="cpp14" scheme="http://lida.site/tags/cpp14/"/>
+    
+      <category term="cpp11" scheme="http://lida.site/tags/cpp11/"/>
+    
+      <category term="emplace" scheme="http://lida.site/tags/emplace/"/>
     
   </entry>
   
@@ -91,11 +91,11 @@
     </summary>
     
     
-      <category term="阿里云" scheme="http://lida.site/tags/%E9%98%BF%E9%87%8C%E4%BA%91/"/>
-    
       <category term="redis" scheme="http://lida.site/tags/redis/"/>
     
       <category term="pika" scheme="http://lida.site/tags/pika/"/>
+    
+      <category term="阿里云" scheme="http://lida.site/tags/%E9%98%BF%E9%87%8C%E4%BA%91/"/>
     
   </entry>
   
@@ -118,8 +118,6 @@
     </summary>
     
     
-      <category term="redis" scheme="http://lida.site/tags/redis/"/>
-    
       <category term="golang" scheme="http://lida.site/tags/golang/"/>
     
       <category term="mongodb" scheme="http://lida.site/tags/mongodb/"/>
@@ -129,6 +127,8 @@
       <category term="python" scheme="http://lida.site/tags/python/"/>
     
       <category term="celery" scheme="http://lida.site/tags/celery/"/>
+    
+      <category term="redis" scheme="http://lida.site/tags/redis/"/>
     
       <category term="微信公众号" scheme="http://lida.site/tags/%E5%BE%AE%E4%BF%A1%E5%85%AC%E4%BC%97%E5%8F%B7/"/>
     
@@ -156,6 +156,8 @@
     </summary>
     
     
+      <category term="阿里云" scheme="http://lida.site/tags/%E9%98%BF%E9%87%8C%E4%BA%91/"/>
+    
       <category term="nginx" scheme="http://lida.site/tags/nginx/"/>
     
       <category term="lua" scheme="http://lida.site/tags/lua/"/>
@@ -163,8 +165,6 @@
       <category term="openresty" scheme="http://lida.site/tags/openresty/"/>
     
       <category term="des" scheme="http://lida.site/tags/des/"/>
-    
-      <category term="阿里云" scheme="http://lida.site/tags/%E9%98%BF%E9%87%8C%E4%BA%91/"/>
     
       <category term="oss" scheme="http://lida.site/tags/oss/"/>
     
@@ -249,13 +249,13 @@
     </summary>
     
     
+      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
+    
       <category term="mysql" scheme="http://lida.site/tags/mysql/"/>
     
       <category term="crash" scheme="http://lida.site/tags/crash/"/>
     
       <category term="libmysqlclient" scheme="http://lida.site/tags/libmysqlclient/"/>
-    
-      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
     
       <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
     
@@ -282,9 +282,9 @@
     
       <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
     
-      <category term="linux" scheme="http://lida.site/tags/linux/"/>
-    
       <category term="apt-get" scheme="http://lida.site/tags/apt-get/"/>
+    
+      <category term="linux" scheme="http://lida.site/tags/linux/"/>
     
   </entry>
   
@@ -307,13 +307,13 @@
     </summary>
     
     
+      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
+    
       <category term="mysql" scheme="http://lida.site/tags/mysql/"/>
     
       <category term="crash" scheme="http://lida.site/tags/crash/"/>
     
       <category term="libmysqlclient" scheme="http://lida.site/tags/libmysqlclient/"/>
-    
-      <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
     
       <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
     
@@ -342,11 +342,11 @@
     
       <category term="ubuntu" scheme="http://lida.site/tags/ubuntu/"/>
     
+      <category term="linux" scheme="http://lida.site/tags/linux/"/>
+    
       <category term="随笔" scheme="http://lida.site/tags/%E9%9A%8F%E7%AC%94/"/>
     
       <category term="字体" scheme="http://lida.site/tags/%E5%AD%97%E4%BD%93/"/>
-    
-      <category term="linux" scheme="http://lida.site/tags/linux/"/>
     
       <category term="fc-cache" scheme="http://lida.site/tags/fc-cache/"/>
     
@@ -408,11 +408,11 @@
     
       <category term="emacs" scheme="http://lida.site/tags/emacs/"/>
     
+      <category term="vim" scheme="http://lida.site/tags/vim/"/>
+    
       <category term="编辑器" scheme="http://lida.site/tags/%E7%BC%96%E8%BE%91%E5%99%A8/"/>
     
       <category term="ide" scheme="http://lida.site/tags/ide/"/>
-    
-      <category term="vim" scheme="http://lida.site/tags/vim/"/>
     
   </entry>
   
